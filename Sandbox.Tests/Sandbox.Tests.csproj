@@ -13,8 +13,4 @@
     <PackageReference Include="MSTest.TestFramework" Version="1.1.18" />
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\CPU.Core\Sandbox.Core.csproj" />
-  </ItemGroup>
-
 </Project>
