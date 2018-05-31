@@ -6,9 +6,9 @@ namespace Sandbox.Core
 {
     public class MMU
     {
-        public int ReadByte(int pc)
+        public byte ReadByte(byte pc)
         {
-            return 1;
+            return 0x00;
         }
     }
 }
