@@ -9,4 +9,10 @@
     <ProjectReference Include="..\Sandbox.Core\Sandbox.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="bios.gb">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

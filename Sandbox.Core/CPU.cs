@@ -8,8 +8,6 @@ namespace Sandbox.Core
     {
         public readonly MMU _mmu;
 
-        public byte ProgramCounter { get; private set; }
-        public Dictionary<string, byte[]> Registers { get; private set; }
         public List<Action> Map { get; private set; }
         public List<Action> CbMap { get; private set; }
 
@@ -22,19 +20,17 @@ namespace Sandbox.Core
         {
             _mmu = mmu;
 
-            ProgramCounter = 0;
-            Registers = new Dictionary<string, byte[]>
-            {
-                {"A", new byte[] { 0x00 } },
-                {"B", new byte[] { 0x00 } },
-                {"C", new byte[] { 0x00 } },
-                {"D", new byte[] { 0x00 } },
-                {"E", new byte[] { 0x00 } },
-                {"H", new byte[] { 0x00 } },
-                {"L", new byte[] { 0x00 } },
-                {"PC", new byte[] { 0x00, 0x00 } },
-                {"SP", new byte[] { 0x00, 0x00 } }
-            };
+            Registers.A = 0x00;
+            Registers.F = 0x00;
+            Registers.B = 0x00;
+            Registers.C = 0x00;
+            Registers.D = 0x00;
+            Registers.E = 0x00;
+            Registers.H = 0x00;
+            Registers.L = 0x00;
+            Registers.SP = 0x0000;
+            Registers.PC = 0x0000;
+
             Map = new List<Action>
             {
                 //00 - 0F
@@ -133,15 +129,15 @@ namespace Sandbox.Core
 
         public void Tick()
         {
-            if (_verbose) Console.WriteLine($"PC: {ProgramCounter}");
+            if (_verbose) Console.WriteLine($"PC: {Registers.PC}");
 
             //Fetch instruction from memory using program counter
-            var opCode = _mmu.ReadByte(ProgramCounter);
+            var opCode = _mmu.ReadByte(Registers.PC);
 
             if (_verbose) Console.WriteLine($"OPCODE: {opCode}");
 
             //Increment program counter
-            ProgramCounter++;
+            Registers.PC++;
 
             //Execute instruction
             try

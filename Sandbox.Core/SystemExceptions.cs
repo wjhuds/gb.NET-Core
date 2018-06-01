@@ -4,6 +4,21 @@ using System.Text;
 
 namespace Sandbox.Core
 {
+    class MemoryReadException : Exception
+    {
+        public MemoryReadException()
+        {
+        }
+
+        public MemoryReadException(string message) : base(message)
+        {
+        }
+
+        public MemoryReadException(string message, Exception inner) : base(message, inner)
+        {
+        }
+    }
+
     class OpCodeException : Exception
     {
         public OpCodeException()
