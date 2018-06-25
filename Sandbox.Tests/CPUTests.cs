@@ -27,13 +27,13 @@ namespace Sandbox.Tests
         public void TestTick()
         {
             //Arrange
-            var initialPC = _cpuInstance.ProgramCounter;
+            var initialPC = _cpuInstance.Reg_PC;
 
             //Act
             _cpuInstance.Tick();
 
             //Assert
-            Assert.Equals(_cpuInstance.ProgramCounter, initialPC + 1);
+            Assert.Equals(_cpuInstance.Reg_PC, initialPC + 1);
         }
     }
 }

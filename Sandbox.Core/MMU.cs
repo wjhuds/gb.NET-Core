@@ -26,8 +26,8 @@ namespace Sandbox.Core
             {
                 _rom = rom;
             }
-            catch(IndexOutOfRangeException exception)
-            {
+            catch (IndexOutOfRangeException)
+      {
                 Console.WriteLine("Error: rom data did not fit in 32k array! (TO BE IMPLEMENTED)");
             }
             catch(Exception exception)
@@ -104,19 +104,24 @@ namespace Sandbox.Core
                         //Graphics object attribute memory
                         case 0xE00:
                             if (pc < 0xFEA0) throw new NotImplementedException("Error: GPU features not implemented");
-                            throw new MemoryReadException($"Error: Invalid address specified ({"0x" + pc.ToString("X")}");
+                            throw new MemoryReadException($"Error: Invalid address specified (0x{pc:X})");
 
                         case 0xF00:
                             if (pc < 0xFF81) return _zram[pc & 0x7F]; //Address truncated to 7 bits to fit 128 bit array
                             throw new NotImplementedException("Error: I/O control features not implemented");
 
                         default:
-                            throw new MemoryReadException($"Error: MMU could not read data at address {"0x" + pc.ToString("X")}");
+                            throw new MemoryReadException($"Error: MMU could not read data at address 0x{pc:X}");
                     }
 
                 default:
-                    throw new MemoryReadException($"Error: MMU could not read data at address {"0x" + pc.ToString("X")}");
+                    throw new MemoryReadException($"Error: MMU could not read data at address 0x{pc:X}");
             }
+        }
+
+        public ushort ReadWord(ushort pc)
+        {
+            return (ushort)((ReadByte(pc) << 8) + ReadByte(++pc));
         }
     }
 }
