@@ -32,17 +32,21 @@ div {
   position: fixed;
   top: 0;
   left: 0;
+  text-align: center;
   background-color: #161616;
   overflow-x: hidden;
   padding: 1.5em 0;
 }
 
-.sidenav a {
+.sidenav button {
   text-decoration: none;
+  background-color: #161616;
+  border: none;
   font-size: 1.7em;
   display: block;
   text-align: center;
   height: 3em;
+  width: 100%;
   line-height: 1.7em;
 }
 

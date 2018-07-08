@@ -4,8 +4,6 @@ import '../DevConsole.css';
 
 class TabButton extends React.Component {
   render() {
-    //const fullClassName = "tabButton" + (this.props.isActive ? " selected" : "");
-    console.log(this.props.isSelected);
     return (
       <li className="horizontalRowItem">
         <button
@@ -38,7 +36,7 @@ export class TabContentRegion extends React.Component {
   render() {
     return (
       <div className="tabContentRegion">
-        {this.props.tabContent.find(t => t && (t.name === this.props.activeTab))}
+        {this.props.tabContent.find(t => t && (t.props.name === this.props.activeTab))}
       </div>
     );
   }

@@ -1,9 +1,10 @@
 import React from 'react';
 import { Grid, Row, Col } from 'react-bootstrap';
+import { HubConnectionBuilder, LogLevel } from '@aspnet/signalr';
 import './DevConsole.css';
 
+import SideNav from './Utilities/SideNav.js';
 import FocusArea from './Utilities/FocusArea.js';
-import Icon from './Utilities/Icon.js';
 /* Displays */
 import MainPanel from './Displays/MainPanel.js';
 import TilemapPanel from './Displays/TilemapPanel.js';
@@ -16,36 +17,53 @@ import InstructionsPanel from './Memory/InstructionsPanel.js';
 import ConsolePanel from './Output/ConsolePanel.js';
 import TileContentPanel from './Output/TileContentPanel.js';
 
-const displayTabs = [<MainPanel name='Main Display' />, <TilemapPanel name='Tilemap Display' />, <FullWindowPanel name='Full Window Display' />];
-const memoryTabs = [<InstructionsPanel name='Instructions' />, <RegistersPanel name='Registers' />, <StackPanel name='Stack' />];
-const outputTabs = [<ConsolePanel name='Console' />, <TileContentPanel name='Tile Content' />];
-
 export default class DevConsole extends React.Component {
+  constructor(props) {
+    super(props);
+
+    this.consoleMessages = [];
+
+    this.displayTabs = [<MainPanel name='Main Display' />, <TilemapPanel name='Tilemap Display' />, <FullWindowPanel name='Full Window Display' />];
+    this.memoryTabs = [<InstructionsPanel name='Instructions' />, <RegistersPanel name='Registers' />, <StackPanel name='Stack' />];
+    this.outputTabs = [<ConsolePanel name='Console' contents={this.consoleMessages}/>, <TileContentPanel name='Tile Content' />];
+
+    this.connection = new HubConnectionBuilder()
+      .withUrl('http://localhost:56739/devhub')
+      .configureLogging(LogLevel.Information)
+      .build();
+
+    this.connection.on('receiveConsoleLog', message => this.onConsoleLog(message));
+
+    this.connection.start()
+        .then(() => {
+          this.connection.invoke('StartEmulation', ['testrom.gb', 'true'])
+        });
+    
+    this.connection.connectionClosed(function() {
+      this.connection.log('Connection closed. Retrying...');
+      setTimeout(function() { this.connection.start(); }, 5000);
+    });
+  }
+  
+  onConsoleLog = (message) => {
+    console.log('damn xd');
+    this.consoleMessages.push(message);
+  }
+
   render() {
     return (
       <div>
-        {/* Roll this into its own component later */}
-        <div className="sidenav">
-          <a href="#">
-            <Icon icon="reorder"/>
-          </a>
-          <a href="#">
-            <Icon icon="input"/>
-          </a>
-          <a href="#">
-            <Icon icon="speaker_notes"/>
-          </a>
-        </div>
-
+        <SideNav />
+        
         <div className="mainPanel">
           <Grid fluid={true}>
             <Row>
               <Col md={8}>
-                <FocusArea tabContent={displayTabs} className='displayArea' />
-                <FocusArea tabContent={outputTabs} className='outputArea' />
+                <FocusArea tabContent={this.displayTabs} divClass='displayArea' />
+                <FocusArea tabContent={this.outputTabs} divClass='outputArea' />
               </Col>
               <Col md={4}>
-                <FocusArea tabContent={memoryTabs} className='memoryArea' />
+                <FocusArea tabContent={this.memoryTabs} divClass='memoryArea' />
               </Col>
             </Row>
           </Grid>

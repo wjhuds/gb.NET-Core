@@ -11,7 +11,7 @@ export default class FocusArea extends React.Component {
 
   render() {
     return (
-      <div class="displayArea">
+      <div className={this.props.divClass}>
         <TabButtonRow
           tabs={this.props.tabContent.map(t => t.props.name)}
           activeTab={this.state.activeTab}
