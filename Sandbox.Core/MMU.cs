@@ -121,7 +121,7 @@ namespace Sandbox.Core
 
         public ushort ReadWord(ushort pc)
         {
-            return (ushort)((ReadByte(pc) << 8) + ReadByte(++pc));
+            return (ushort)((ReadByte((ushort)(pc + 1)) << 8) | ReadByte(pc));
         }
     }
 }
