@@ -19,6 +19,21 @@ namespace Sandbox.Core
         }
     }
 
+    class MemoryWriteException : Exception
+    {
+        public MemoryWriteException()
+        {
+        }
+
+        public MemoryWriteException(string message) : base(message)
+        {
+        }
+
+        public MemoryWriteException(string message, Exception inner) : base(message, inner)
+        {
+        }
+    }
+
     class OpCodeException : Exception
     {
         public OpCodeException()

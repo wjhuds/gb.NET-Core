@@ -39,9 +39,9 @@ namespace Sandbox.Core
                 //10 - 1F
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 //20 - 2F
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, LD_HL_D16, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 //30 - 3F
-                null, LD_SP_D16, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, LD_SP_D16, LD_HL_DEC_A, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 //40 - 4F
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 //50 - 5F
@@ -141,7 +141,7 @@ namespace Sandbox.Core
             //Execute instruction
             try
             {
-                Map[opCode]();     //currently doesnt factor in cbMap
+                Map[opCode]();
             }
             catch(OpCodeException exception)
             {
@@ -161,37 +161,50 @@ namespace Sandbox.Core
         #endregion
 
         #region Operations
-        //General function templates
-        private void LD_SP_D16()
+        private void LD_SP_D16()    //LD SP,d16
         {
             Reg_SP = _mmu.ReadWord(Reg_PC);
             Reg_PC += 2;
             lastOpCycles = 12;
         }
 
-        private void XOR_A()
+        private void LD_HL_D16()    //LD HL,d16
+        {
+            Reg_HL = _mmu.ReadWord(Reg_PC);
+            Reg_PC += 2;
+            lastOpCycles = 12;
+        }
+
+        private void LD_HL_PNT_A_DEC()  //LD (HL-),A
+        {
+            Reg_HL = Reg_A;
+            Reg_HL--;
+            lastOpCycles = 8;
+        }
+
+        private void XOR_A()        //XOR A
         {
             Reg_A ^= Reg_A;
             if (Reg_A == 0) SetZeroFlag();
-            Reg_PC++;
             lastOpCycles = 4;
         }
         #endregion
 
         #region Helper Functions
-        private void SetZeroFlag() { Reg_F |= 1 << 7; }
-        private void ClearZeroFlag() { Reg_F = (byte)(Reg_F & ~(1 << 7)); }
-        private void SetSubFlag() { Reg_F |= 1 << 6; }
-        private void ClearSubFlag() { Reg_F = (byte)(Reg_F & ~(1 << 6)); }
-        private void SetHalfCarryFlag() { Reg_F |= 1 << 5; }
-        private void ClearHalfCarryFlag() { Reg_F = (byte)(Reg_F & ~(1 << 5)); }
-        private void SetCarryFlag() { Reg_F |= 1 << 4; }
-        private void ClearCarryFlag() { Reg_F = (byte)(Reg_F & ~(1 << 4)); }
+        private void SetZeroFlag()          { Reg_F |= 1 << 7; }
+        private void SetSubFlag()           { Reg_F |= 1 << 6; }
+        private void SetHalfCarryFlag()     { Reg_F |= 1 << 5; }
+        private void SetCarryFlag()         { Reg_F |= 1 << 4; }
 
-        private bool GetZeroFlag() { return (Reg_F & 128) == 128; }
-        private bool GetSubFlag() { return (Reg_F & 64) == 64; }
-        private bool GetHalfCarryFlag() { return (Reg_F & 32) == 32; }
-        private bool GetCarryFlag() { return (Reg_F & 16) == 16; }
+        private void ClearZeroFlag()        { Reg_F = (byte)(Reg_F & ~(1 << 7)); }
+        private void ClearSubFlag()         { Reg_F = (byte)(Reg_F & ~(1 << 6)); }
+        private void ClearHalfCarryFlag()   { Reg_F = (byte)(Reg_F & ~(1 << 5)); }
+        private void ClearCarryFlag()       { Reg_F = (byte)(Reg_F & ~(1 << 4)); }
+
+        private bool GetZeroFlag()          { return (Reg_F & 128) == 128; }
+        private bool GetSubFlag()           { return (Reg_F & 64) == 64; }
+        private bool GetHalfCarryFlag()     { return (Reg_F & 32) == 32; }
+        private bool GetCarryFlag()         { return (Reg_F & 16) == 16; }
         #endregion
 
         #region Debug Functions
