@@ -11,6 +11,7 @@ namespace Sandbox.Core
 
         private byte[] _bios = new byte[256];
         private byte[] _rom = new byte[32768];
+        private byte[] _vram = new byte[8192];
         private byte[] _wram = new byte[8192];
         private byte[] _eram = new byte[8192];
         private byte[] _zram = new byte[128];
@@ -130,7 +131,8 @@ namespace Sandbox.Core
             //GPU VRAM
             if (0x8000 <= addr && addr <= 0x9FFF)
             {
-                throw new NotImplementedException("Error: GPU features not implemented");
+                _vram[addr & 0x1FFF] = val;
+                return;
             }
 
             //External ram (eram)
