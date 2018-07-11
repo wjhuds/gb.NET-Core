@@ -35,7 +35,7 @@ namespace Sandbox.Core
             Map = new List<Action>
             {
                 //00 - 0F
-                null, null, null, null, null, null, null, null, null, null, null, null, INC_C, null, LD_C_d8, null,
+                null, null, null, null, null, LD_B_d8, null, null, null, null, null, null, INC_C, null, LD_C_d8, null,
                 //10 - 1F
                 null, LD_DE_d16, null, null, null, null, null, null, null, null, LD_A_DEm, null, null, null, null, null,
                 //20 - 2F
@@ -59,7 +59,7 @@ namespace Sandbox.Core
                 //B0 - BF
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 //C0 - CF
-                null, null, null, null, null, null, null, null, null, null, null, CB, null, CALL_d16m, null, null,
+                null, null, null, null, CALL_NZ_d16m, null, null, null, null, null, null, CB, null, CALL_d16m, null, null,
                 //D0 - DF
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 //E0 - EF
@@ -70,7 +70,7 @@ namespace Sandbox.Core
             CbMap = new List<Action>
             {
                 //00 - 0F
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
+                null, null, null, null, null, RLC_HLm, null, null, null, null, null, null, null, null, null, null,
                 //10 - 1F
                 null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
                 //20 - 2F
@@ -164,12 +164,29 @@ namespace Sandbox.Core
         //Main codes
         private void CALL_d16m()    //CALL a16
         {
+            Reg_SP -= 2;
+            _mmu.WriteWord(Reg_SP, (ushort)(Reg_PC + 2));
+            Reg_PC = _mmu.ReadWord(Reg_PC);
+            lastOpCycles = 4;
+        }
 
+        private void CALL_NZ_d16m() //CALL NZ,a16
+        {
+            if (!GetZeroFlag())
+            {
+                CALL_d16m();
+                lastOpCycles = 24;
+            }
+            else
+            {
+                lastOpCycles = 12;
+            }
         }
         
         private void CB()           //CB
         {
             CbMap[_mmu.ReadByte(Reg_PC++)]();
+            lastOpCycles += 4;
         }
 
         private void INC_C()        //INC C
@@ -211,6 +228,12 @@ namespace Sandbox.Core
             var addr = (ushort)(0xFF00 + _mmu.ReadByte(Reg_PC++));
             _mmu.WriteByte(addr, Reg_A);
             lastOpCycles = 12;
+        }
+
+        private void LD_B_d8()      //LD B,d8
+        {
+            Reg_B = _mmu.ReadByte(Reg_PC++);
+            lastOpCycles = 8;
         }
 
         private void LD_C_d8()      //LD C,d8
@@ -271,18 +294,33 @@ namespace Sandbox.Core
         {
             if (GetBit7(Reg_H)) ClearZeroFlag();
             else SetZeroFlag();
+            lastOpCycles = 8;
+        }
+
+        public void RLC_HLm()       //RLC (HL)
+        {
+            bool toCarry = GetBit7(_mmu.ReadByte(Reg_HL));
+            _mmu.WriteByte(Reg_HL, (byte)((_mmu.ReadByte(Reg_HL) << 1) + (toCarry ? 1 : 0)));
+
+            if (_mmu.ReadByte(Reg_HL) == 0) SetCarryFlag();
+            ClearSubFlag();
+            ClearHalfCarryFlag();
+            if (toCarry) SetCarryFlag();
+            else ClearCarryFlag();
+
+            lastOpCycles = 16;
         }
         #endregion
 
         #region Helper Functions
-        private bool GetBit7(byte val)      { return (val & 128) == 128; }
-        private bool GetBit6(byte val)      { return (val & 64) == 64; }
-        private bool GetBit5(byte val)      { return (val & 32) == 32; }
-        private bool GetBit4(byte val)      { return (val & 16) == 16; }
-        private bool GetBit3(byte val)      { return (val & 8) == 8; }
-        private bool GetBit2(byte val)      { return (val & 4) == 4; }
-        private bool GetBit1(byte val)      { return (val & 2) == 2; }
-        private bool GetBit0(byte val)      { return (val & 1) == 1; }
+        private bool GetBit7(byte val)      { return (val & 0x80) == 0x80; }
+        private bool GetBit6(byte val)      { return (val & 0x40) == 0x40; }
+        private bool GetBit5(byte val)      { return (val & 0x20) == 0x20; }
+        private bool GetBit4(byte val)      { return (val & 0x10) == 0x10; }
+        private bool GetBit3(byte val)      { return (val & 0x08) == 0x08; }
+        private bool GetBit2(byte val)      { return (val & 0x04) == 0x04; }
+        private bool GetBit1(byte val)      { return (val & 0x02) == 0x02; }
+        private bool GetBit0(byte val)      { return (val & 0x01) == 0x01; }
 
         private bool GetZeroFlag()          { return GetBit7(Reg_F); }
         private bool GetSubFlag()           { return GetBit6(Reg_F); }

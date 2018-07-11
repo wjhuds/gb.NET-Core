@@ -184,5 +184,11 @@ namespace Sandbox.Core
 
             throw new MemoryWriteException($"Error: MMU could not write data at address 0x{addr:X}");
         }
+
+        public void WriteWord(ushort addr, ushort val)
+        {
+            WriteByte(addr++, (byte)(val & 255));
+            WriteByte(addr, (byte)(val >> 8));
+        }
     }
 }
