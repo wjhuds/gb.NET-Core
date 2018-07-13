@@ -34,17 +34,17 @@ namespace Sandbox.Core
         }
     }
 
-    class OpCodeException : Exception
+    class InstructionNotImplementedException : Exception
     {
-        public OpCodeException()
+        public InstructionNotImplementedException()
         {
         }
 
-        public OpCodeException(string message) : base(message)
+        public InstructionNotImplementedException(string message) : base(message)
         {
         }
 
-        public OpCodeException(string message, Exception inner) : base(message, inner)
+        public InstructionNotImplementedException(string message, Exception inner) : base(message, inner)
         {
         }
     }
