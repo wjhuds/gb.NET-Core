@@ -406,4 +406,4 @@ typings/
 .vuepress/dist
 
 # Serverless directories
-.serverless
+.serverlessbios.bin
