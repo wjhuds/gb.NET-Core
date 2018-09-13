@@ -3,7 +3,11 @@
 ##
 ## Get latest from https://github.com/github/gitignore/blob/master/VisualStudio.gitignore
 
+*.bin
 *.gb
+*.gbc
+*.sav
+*.sym
 
 # User-specific files
 *.suo

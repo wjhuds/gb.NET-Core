@@ -10,15 +10,15 @@ namespace Sandbox.Harness
         {
             if (args.Length == 0)
             {
-                Console.WriteLine("USAGE: gbnet rom_path [verbose]");
+                Console.WriteLine("USAGE: gbnet bios_path rom_path [verbose]");
                 Console.ReadKey();  //Temporary while system is run inside VS
                 System.Environment.Exit(1);
             }
 
-            var biosPath = "bios.gb";
-            var romPath = args[0];
+            var biosPath = args[0];
+            var romPath = args[1];
 
-            var verbose = (args.Length > 1 && args[1] == "true") ? true : false;
+            var verbose = (args.Length > 2 && args[2] == "true") ? true : false;
 
             Console.WriteLine($"Verbose mode: <{(verbose ? "ON" : "OFF")}>");
 
