@@ -1182,16 +1182,16 @@ namespace Sandbox.Core
         // LDHL         SP, n       F8      12
         private void LDHL_SP_n(byte opcode)
         {
-            ushort val;
+            ushort result;
             switch (opcode)
             {
                 case 0xF8:
-                    var delta = Reg_PC > 127
+                    var signedVal = Reg_PC > 127
                         ? -((~Reg_PC + 1) & 0xFF)
                         : Reg_PC;
                     Reg_PC++;
-                    val = 
-                    Reg_HL = val;
+                    result = (ushort)(Reg_SP + signedVal);
+                    Reg_HL = result;
                     lastOpCycles = 12;
                     break;
                 default:
@@ -1200,10 +1200,126 @@ namespace Sandbox.Core
 
             AffectZeroFlag(false);
             AffectSubFlag(false);
-            AffectHalfCarryFlag((((val & 0xF) + 1) & 0x10) == 0x10);
-            AffectCarryFlag(val > 0xFFFF);
+            AffectHalfCarryFlag((((result & 0xF) + 1) & 0x10) == 0x10);
+            AffectCarryFlag((((result & 0xFF) + 1) & 0x100) == 0x100);
         }
 
+        // 5. LD (nn),SP (p.78)
+        //
+        // - Description -
+        // Put Stack Pointer (SP) at address n.
+        //
+        // - Use with -
+        // nn = two byte immediate address.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // LD           (nn), SP    08      20
+        private void LD_nnm_SP(byte opcode)
+        {
+            switch(opcode)
+            {
+                case 0x08:
+                    _mmu.WriteWord((ushort)(_mmu.ReadWord(Reg_PC)), Reg_SP);
+                    Reg_PC += 2;
+                    lastOpCycles = 20;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+        }
+
+        // 6. PUSH nn (p.78)
+        //
+        // - Description -
+        // Push register pair nn onto stack.
+        // Decrement Stack Pointer (SP) twice.
+        //
+        // - Use with -
+        // nn = AF, BC, DE, HL
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // PUSH         AF          F5      16
+        // PUSH         BC          C5      16
+        // PUSH         DE          D5      16
+        // PUSH         HL          E5      16
+        private void PUSH_nn(byte opcode)
+        {
+            switch (opcode)
+            {
+                case 0xF5:
+                    _mmu.WriteWord(Reg_SP, Reg_AF);
+                    Reg_SP -= 2;
+                    lastOpCycles = 16;
+                    break;
+                case 0xC5:
+                    _mmu.WriteWord(Reg_SP, Reg_BC);
+                    Reg_SP -= 2;
+                    lastOpCycles = 16;
+                    break;
+                case 0xD5:
+                    _mmu.WriteWord(Reg_SP, Reg_DE);
+                    Reg_SP -= 2;
+                    lastOpCycles = 16;
+                    break;
+                case 0xE5:
+                    _mmu.WriteWord(Reg_SP, Reg_HL);
+                    Reg_SP -= 2;
+                    lastOpCycles = 16;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+        }
+
+        // 7. POP nn (p.79)
+        //
+        // - Description -
+        // Pop two bytes off stack into register pair nn.
+        // Increment Stack Pointer (SP) twice.
+        //
+        // - Use with -
+        // nn = AF, BC, DE, HL
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // POP          AF          F1      12
+        // POP          BC          C1      12
+        // POP          DE          D1      12
+        // POP          HL          E1      12
+        private void POP_nn(byte opcode)
+        {
+            switch (opcode)
+            {
+                case 0xF1:
+                    Reg_AF = _mmu.ReadWord(Reg_SP);
+                    Reg_SP += 2;
+                    lastOpCycles = 12;
+                    break;
+                case 0xC1:
+                    Reg_BC = _mmu.ReadWord(Reg_SP);
+                    Reg_SP += 2;
+                    lastOpCycles = 12;
+                    break;
+                case 0xD1:
+                    Reg_DE = _mmu.ReadWord(Reg_SP);
+                    Reg_SP += 2;
+                    lastOpCycles = 12;
+                    break;
+                case 0xE1:
+                    Reg_HL = _mmu.ReadWord(Reg_SP);
+                    Reg_SP += 2;
+                    lastOpCycles = 12;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+        }
+
+        #endregion
+
+        #region 8-Bit ALU
         #endregion
 
         //No operation (DP, 97)

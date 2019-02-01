@@ -19,6 +19,11 @@ namespace Sandbox.Core
         public ushort Reg_PC { get; set; }
 
         //Computed registers
+        public ushort Reg_AF
+        {
+            get { return (ushort)((Reg_A << 8) + Reg_F); }
+            set { Reg_A = (byte)(value << 8); Reg_F = (byte)(value & 0xFF); }
+        }
         public ushort Reg_BC
         {
             get { return (ushort)((Reg_B << 8) + Reg_C); }
