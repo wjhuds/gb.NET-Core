@@ -1104,14 +1104,9 @@ namespace Sandbox.Core
 
         #endregion
 
-        //No operation (DP, 97)
-        private void NOP(byte opcode)
-        {
-            lastOpCycles = 4;
-            return;
-        }
+        #region 16-Bit Loads
 
-        // 1. LD n,nn
+        // 1. LD n,nn (p.76)
         //
         // - Description -
         // Put value nn into n.
@@ -1122,10 +1117,10 @@ namespace Sandbox.Core
         //
         // - Opcodes -
         // Instruction  Parameters  Opcode  Cycles
-        // LD           BC, nn      01      12
-        // LD           DE, nn      11      12
-        // LD           HL, nn      21      12
-        // LD           SP, nn      31      12
+        // LD           BC, n       01      12
+        // LD           DE, n       11      12
+        // LD           HL, n       21      12
+        // LD           SP, n       31      12
         private void LD_n_nn(byte opcode)
         {
             switch (opcode)
@@ -1151,6 +1146,70 @@ namespace Sandbox.Core
             }
 
             lastOpCycles = 12;
+        }
+
+        // 2. LD SP,HL (p.76)
+        //
+        // - Description -
+        // Put HL into Stack Pointer (SP).
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // LD           SP, HL      F9      8
+        private void LD_SP_HL(byte opcode)
+        {
+            switch (opcode)
+            {
+                case 0xF9:
+                    Reg_SP = Reg_HL;
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+        }
+
+        // 3/4. LDHL SP,n (p.77)
+        //
+        // - Description -
+        // Put SP + n effective address into HL.
+        //
+        // - Use with -
+        // n = one byte signed immediate value.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // LDHL         SP, n       F8      12
+        private void LDHL_SP_n(byte opcode)
+        {
+            ushort val;
+            switch (opcode)
+            {
+                case 0xF8:
+                    var delta = Reg_PC > 127
+                        ? -((~Reg_PC + 1) & 0xFF)
+                        : Reg_PC;
+                    Reg_PC++;
+                    val = 
+                    Reg_HL = val;
+                    lastOpCycles = 12;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(false);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag((((val & 0xF) + 1) & 0x10) == 0x10);
+            AffectCarryFlag(val > 0xFFFF);
+        }
+
+        #endregion
+
+        //No operation (DP, 97)
+        private void NOP(byte opcode)
+        {
+            lastOpCycles = 4;
             return;
         }
 
