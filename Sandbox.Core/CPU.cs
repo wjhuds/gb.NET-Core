@@ -1320,6 +1320,319 @@ namespace Sandbox.Core
         #endregion
 
         #region 8-Bit ALU
+
+        // 1. ADD A,n (p.80)
+        //
+        // - Description -
+        // Add n to A.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL), #
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Set if carry from bit 3.
+        // C - Set if carry from bit 7.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // ADD          A, A        87      4
+        // ADD          A, B        80      4
+        // ADD          A, C        81      4
+        // ADD          A, D        82      4
+        // ADD          A, E        83      4
+        // ADD          A, H        84      4
+        // ADD          A, L        85      4
+        // ADD          A, (HL)     86      8
+        // ADD          A, #        C6      8
+        private void ADD_A_n(byte opcode)
+        {
+            ushort result;
+            switch (opcode)
+            {
+                case 0x87:
+                    result = (ushort)(Reg_A + Reg_A);
+                    lastOpCycles = 4;
+                    break;
+                case 0x80:
+                    result = (ushort)(Reg_A + Reg_B);
+                    lastOpCycles = 4;
+                    break;
+                case 0x81:
+                    result = (ushort)(Reg_A + Reg_C);
+                    lastOpCycles = 4;
+                    break;
+                case 0x82:
+                    result = (ushort)(Reg_A + Reg_D);
+                    lastOpCycles = 4;
+                    break;
+                case 0x83:
+                    result = (ushort)(Reg_A + Reg_E);
+                    lastOpCycles = 4;
+                    break;
+                case 0x84:
+                    result = (ushort)(Reg_A + Reg_H);
+                    lastOpCycles = 4;
+                    break;
+                case 0x85:
+                    result = (ushort)(Reg_A + Reg_L);
+                    lastOpCycles = 4;
+                    break;
+                case 0x86:
+                    result = (ushort)(Reg_A + Reg_HL);
+                    lastOpCycles = 8;
+                    break;
+                case 0xC6:
+                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_PC++));
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            Reg_A = (byte)result;
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag((((result & 0xF) + 1) & 0x10) == 0x10);
+            AffectCarryFlag((((result & 0xFF) + 1) & 0x100) == 0x100);
+        }
+
+        // 2. ADC A,n (p.81)
+        //
+        // - Description -
+        // Add n + Carry flag to A.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL), #
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Set if carry from bit 3.
+        // C - Set if carry from bit 7.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // ADC          A, A        8F      4
+        // ADC          A, B        88      4
+        // ADC          A, C        89      4
+        // ADC          A, D        8A      4
+        // ADC          A, E        8B      4
+        // ADC          A, H        8C      4
+        // ADC          A, L        8D      4
+        // ADC          A, (HL)     8E      8
+        // ADC          A, #        CE      8
+        private void ADC_A_n(byte opcode)
+        {
+            ushort result;
+            switch (opcode)
+            {
+                case 0x87:
+                    result = (ushort)(Reg_A + Reg_A + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x80:
+                    result = (ushort)(Reg_A + Reg_B + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x81:
+                    result = (ushort)(Reg_A + Reg_C + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x82:
+                    result = (ushort)(Reg_A + Reg_D + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x83:
+                    result = (ushort)(Reg_A + Reg_E + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x84:
+                    result = (ushort)(Reg_A + Reg_H + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x85:
+                    result = (ushort)(Reg_A + Reg_L + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x86:
+                    result = (ushort)(Reg_A + Reg_HL + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 8;
+                    break;
+                case 0xC6:
+                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_PC++) + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            Reg_A = (byte)result;
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag((((result & 0xF) + 1) & 0x10) == 0x10);
+            AffectCarryFlag((((result & 0xFF) + 1) & 0x100) == 0x100);
+        }
+
+        // 3. SUB A,n (p.82)
+        //
+        // - Description -
+        // Subtract n from A.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL), #
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Set.
+        // H - Set if no borrow from bit 4.
+        // C - Set if no borrow.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // SUB          A, A        97      4
+        // SUB          A, B        90      4
+        // SUB          A, C        91      4
+        // SUB          A, D        92      4
+        // SUB          A, E        93      4
+        // SUB          A, H        94      4
+        // SUB          A, L        95      4
+        // SUB          A, (HL)     96      8
+        // SUB          A, #        D6      8
+        private void SUB_A_n(byte opcode)
+        {
+            ushort result;
+            switch (opcode)
+            {
+                case 0x97:
+                    result = (ushort)(Reg_A - Reg_A);
+                    lastOpCycles = 4;
+                    break;
+                case 0x90:
+                    result = (ushort)(Reg_A - Reg_B);
+                    lastOpCycles = 4;
+                    break;
+                case 0x91:
+                    result = (ushort)(Reg_A - Reg_C);
+                    lastOpCycles = 4;
+                    break;
+                case 0x92:
+                    result = (ushort)(Reg_A - Reg_D);
+                    lastOpCycles = 4;
+                    break;
+                case 0x93:
+                    result = (ushort)(Reg_A - Reg_E);
+                    lastOpCycles = 4;
+                    break;
+                case 0x94:
+                    result = (ushort)(Reg_A - Reg_H);
+                    lastOpCycles = 4;
+                    break;
+                case 0x95:
+                    result = (ushort)(Reg_A - Reg_L);
+                    lastOpCycles = 4;
+                    break;
+                case 0x96:
+                    result = (ushort)(Reg_A - Reg_HL);
+                    lastOpCycles = 8;
+                    break;
+                case 0xD6:
+                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_PC++));
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            Reg_A = (byte)result;
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(true);
+            AffectHalfCarryFlag((result & 0x10) == 0x10);
+            AffectCarryFlag((result & 0x100) == 0x100);
+        }
+
+        // 4. SBC A,n (p.83)
+        //
+        // - Description -
+        // Subtract n + Carry flag from A.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL), #
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Set.
+        // H - Set if no borrow from bit 4.
+        // C - Set if no borrow.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // SBC          A, A        9F      4
+        // SBC          A, B        98      4
+        // SBC          A, C        99      4
+        // SBC          A, D        9A      4
+        // SBC          A, E        9B      4
+        // SBC          A, H        9C      4
+        // SBC          A, L        9D      4
+        // SBC          A, (HL)     9E      8
+        // SBC          A, #        DE      8
+        private void SBC_A_n(byte opcode)
+        {
+            ushort result;
+            switch (opcode)
+            {
+                case 0x87:
+                    result = (ushort)(Reg_A - Reg_A + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x80:
+                    result = (ushort)(Reg_A - Reg_B + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x81:
+                    result = (ushort)(Reg_A - Reg_C + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x82:
+                    result = (ushort)(Reg_A - Reg_D + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x83:
+                    result = (ushort)(Reg_A - Reg_E + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x84:
+                    result = (ushort)(Reg_A - Reg_H + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x85:
+                    result = (ushort)(Reg_A - Reg_L + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 4;
+                    break;
+                case 0x86:
+                    result = (ushort)(Reg_A - Reg_HL + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 8;
+                    break;
+                case 0xC6:
+                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_PC++) + (GetCarryFlag() ? 1 : 0));
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            Reg_A = (byte)result;
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(true);
+            AffectHalfCarryFlag((result & 0x10) == 0x10);
+            AffectCarryFlag((result & 0x100) == 0x100);
+        }
+
         #endregion
 
         //No operation (DP, 97)
