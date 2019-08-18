@@ -1009,7 +1009,7 @@ namespace Sandbox.Core
         // 13/14/15. LDI A,(HL) (p.73)
         //
         // - Description -
-        // Put value at address HL into A. Decrement HL.
+        // Put value at address HL into A. Increment HL.
         // Same as: LD A,(HL) - INC HL
         //
         // - Opcodes -
@@ -1380,7 +1380,7 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x86:
-                    result = (ushort)(Reg_A + Reg_HL);
+                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_HL));
                     lastOpCycles = 8;
                     break;
                 case 0xC6:
@@ -1458,7 +1458,7 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x86:
-                    result = (ushort)(Reg_A + Reg_HL + (GetCarryFlag() ? 1 : 0));
+                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_HL) + (GetCarryFlag() ? 1 : 0));
                     lastOpCycles = 8;
                     break;
                 case 0xC6:
@@ -1536,7 +1536,7 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x96:
-                    result = (ushort)(Reg_A - Reg_HL);
+                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_HL));
                     lastOpCycles = 8;
                     break;
                 case 0xD6:
@@ -1614,7 +1614,7 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x86:
-                    result = (ushort)(Reg_A - Reg_HL + (GetCarryFlag() ? 1 : 0));
+                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_HL) + (GetCarryFlag() ? 1 : 0));
                     lastOpCycles = 8;
                     break;
                 case 0xC6:
@@ -1631,6 +1631,636 @@ namespace Sandbox.Core
             AffectSubFlag(true);
             AffectHalfCarryFlag((result & 0x10) == 0x10);
             AffectCarryFlag((result & 0x100) == 0x100);
+        }
+
+        // 5. AND n (p.84)
+        //
+        // - Description -
+        // Logically AND n with A, result in A.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL), #
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Set.
+        // C - Reset.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // AND          A           A7      4
+        // AND          B           A0      4
+        // AND          C           A1      4
+        // AND          D           A2      4
+        // AND          E           A3      4
+        // AND          H           A4      4
+        // AND          L           A5      4
+        // AND          (HL)        A6      8
+        // AND          #           E6      8
+        private void AND_n(byte opcode)
+        {
+            ushort result;
+            switch (opcode)
+            {
+                case 0xA7:
+                    result = (ushort)(Reg_A + Reg_A);
+                    lastOpCycles = 4;
+                    break;
+                case 0xA0:
+                    result = (ushort)(Reg_A + Reg_B);
+                    lastOpCycles = 4;
+                    break;
+                case 0xA1:
+                    result = (ushort)(Reg_A + Reg_C);
+                    lastOpCycles = 4;
+                    break;
+                case 0xA2:
+                    result = (ushort)(Reg_A + Reg_D);
+                    lastOpCycles = 4;
+                    break;
+                case 0xA3:
+                    result = (ushort)(Reg_A + Reg_E);
+                    lastOpCycles = 4;
+                    break;
+                case 0xA4:
+                    result = (ushort)(Reg_A + Reg_H);
+                    lastOpCycles = 4;
+                    break;
+                case 0xA5:
+                    result = (ushort)(Reg_A + Reg_L);
+                    lastOpCycles = 4;
+                    break;
+                case 0xA6:
+                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_HL));
+                    lastOpCycles = 8;
+                    break;
+                case 0xE6:
+                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_PC++));
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            Reg_A = (byte)result;
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(true);
+            AffectCarryFlag(false);
+        }
+
+        // 6. OR n (p.85)
+        //
+        // - Description -
+        // Logical OR n with register A, result in A.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL), #
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Reset.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // OR           A           B7      4
+        // OR           B           B0      4
+        // OR           C           B1      4
+        // OR           D           B2      4
+        // OR           E           B3      4
+        // OR           H           B4      4
+        // OR           L           B5      4
+        // OR           (HL)        B6      8
+        // OR           #           F6      8
+        private void OR_n(byte opcode)
+        {
+            ushort result;
+            switch (opcode)
+            {
+                case 0xB7:
+                    result = (ushort)(Reg_A | Reg_A);
+                    lastOpCycles = 4;
+                    break;
+                case 0xB0:
+                    result = (ushort)(Reg_A | Reg_B);
+                    lastOpCycles = 4;
+                    break;
+                case 0xB1:
+                    result = (ushort)(Reg_A | Reg_C);
+                    lastOpCycles = 4;
+                    break;
+                case 0xB2:
+                    result = (ushort)(Reg_A | Reg_D);
+                    lastOpCycles = 4;
+                    break;
+                case 0xB3:
+                    result = (ushort)(Reg_A | Reg_E);
+                    lastOpCycles = 4;
+                    break;
+                case 0xB4:
+                    result = (ushort)(Reg_A | Reg_H);
+                    lastOpCycles = 4;
+                    break;
+                case 0xB5:
+                    result = (ushort)(Reg_A | Reg_L);
+                    lastOpCycles = 4;
+                    break;
+                case 0xB6:
+                    result = (ushort)(Reg_A | _mmu.ReadByte(Reg_HL));
+                    lastOpCycles = 8;
+                    break;
+                case 0xF6:
+                    result = (ushort)(Reg_A | _mmu.ReadByte(Reg_PC++));
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            Reg_A = (byte)result;
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(false);
+        }
+
+        // 7. XOR n (p.86)
+        //
+        // - Description -
+        // Logical exclusive OR n with register A, result in A.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL), #
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Reset.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // XOR          A           AF      4
+        // XOR          B           A8      4
+        // XOR          C           A9      4
+        // XOR          D           AA      4
+        // XOR          E           AB      4
+        // XOR          H           AC      4
+        // XOR          L           AD      4
+        // XOR          (HL)        AE      8
+        // XOR          #           EE      8
+        private void XOR_n(byte opcode)
+        {
+            ushort result;
+            switch (opcode)
+            {
+                case 0xAF:
+                    result = (ushort)(Reg_A ^ Reg_A);
+                    lastOpCycles = 4;
+                    break;
+                case 0xA8:
+                    result = (ushort)(Reg_A ^ Reg_B);
+                    lastOpCycles = 4;
+                    break;
+                case 0xA9:
+                    result = (ushort)(Reg_A ^ Reg_C);
+                    lastOpCycles = 4;
+                    break;
+                case 0xAA:
+                    result = (ushort)(Reg_A ^ Reg_D);
+                    lastOpCycles = 4;
+                    break;
+                case 0xAB:
+                    result = (ushort)(Reg_A ^ Reg_E);
+                    lastOpCycles = 4;
+                    break;
+                case 0xAC:
+                    result = (ushort)(Reg_A ^ Reg_H);
+                    lastOpCycles = 4;
+                    break;
+                case 0xAD:
+                    result = (ushort)(Reg_A ^ Reg_L);
+                    lastOpCycles = 4;
+                    break;
+                case 0xAE:
+                    result = (ushort)(Reg_A ^ _mmu.ReadByte(Reg_HL));
+                    lastOpCycles = 8;
+                    break;
+                case 0xEE:
+                    result = (ushort)(Reg_A ^ _mmu.ReadByte(Reg_PC++));
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            Reg_A = (byte)result;
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(false);
+        }
+
+        // 8. CP n (p.87)
+        //
+        // - Description -
+        // Compare A with n. This is basically an A - n
+        // subtraction instruction but the results are thrown
+        // away.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL), #
+        //
+        // - Flags affected -
+        // Z - Set if result is zero. (Set if A = n)
+        // N - Set.
+        // H - Set if no borrow from bit 4.
+        // C - Set for no borrow. (Set if A < n)
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // CP           A           BF      4
+        // CP           B           B8      4
+        // CP           C           B9      4
+        // CP           D           BA      4
+        // CP           E           BB      4
+        // CP           H           BC      4
+        // CP           L           BD      4
+        // CP           (HL)        BE      8
+        // CP           #           FE      8
+        private void CP_n(byte opcode)
+        {
+            ushort result;
+            switch (opcode)
+            {
+                case 0xBF:
+                    result = (ushort)(Reg_A - Reg_A);
+                    lastOpCycles = 4;
+                    break;
+                case 0xB8:
+                    result = (ushort)(Reg_A - Reg_B);
+                    lastOpCycles = 4;
+                    break;
+                case 0xB9:
+                    result = (ushort)(Reg_A - Reg_C);
+                    lastOpCycles = 4;
+                    break;
+                case 0xBA:
+                    result = (ushort)(Reg_A - Reg_D);
+                    lastOpCycles = 4;
+                    break;
+                case 0xBB:
+                    result = (ushort)(Reg_A - Reg_E);
+                    lastOpCycles = 4;
+                    break;
+                case 0xBC:
+                    result = (ushort)(Reg_A - Reg_H);
+                    lastOpCycles = 4;
+                    break;
+                case 0xBD:
+                    result = (ushort)(Reg_A - Reg_L);
+                    lastOpCycles = 4;
+                    break;
+                case 0xBE:
+                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_HL));
+                    lastOpCycles = 8;
+                    break;
+                case 0xFE:
+                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_PC++));
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(true);
+            AffectHalfCarryFlag((result & 0x10) == 0x10);
+            AffectCarryFlag((result & 0x100) == 0x100);
+        }
+
+        // 9. INC n (p.88)
+        //
+        // - Description -
+        // Increment register n.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL)
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Set if carry from bit 3.
+        // C - Not affected.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // INC          A           3C      4
+        // INC          B           04      4
+        // INC          C           0C      4
+        // INC          D           14      4
+        // INC          E           1C      4
+        // INC          H           24      4
+        // INC          L           2C      4
+        // INC          (HL)        34      12
+        private void INC_n(byte opcode)
+        {
+            ushort original;
+            switch (opcode)
+            {
+                case 0x3C:
+                    original = Reg_A++;
+                    lastOpCycles = 4;
+                    break;
+                case 0x04:
+                    original = Reg_B++;
+                    lastOpCycles = 4;
+                    break;
+                case 0x0C:
+                    original = Reg_C++;
+                    lastOpCycles = 4;
+                    break;
+                case 0x14:
+                    original = Reg_D++;
+                    lastOpCycles = 4;
+                    break;
+                case 0x1C:
+                    original = Reg_E++;
+                    lastOpCycles = 4;
+                    break;
+                case 0x24:
+                    original = Reg_H++;
+                    lastOpCycles = 4;
+                    break;
+                case 0x2C:
+                    original = Reg_L++;
+                    lastOpCycles = 4;
+                    break;
+                case 0x34:
+                    original = _mmu.ReadByte(Reg_HL);
+                    _mmu.WriteByte(Reg_HL, (byte)(_mmu.ReadByte(Reg_HL) + 1));
+                    lastOpCycles = 12;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag((byte)(original + 1) == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(((byte)(original + 1) & 0x10) == 0x10);
+        }
+
+        // 10. DEC n (p.89)
+        //
+        // - Description -
+        // Decrement register n.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL)
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Set.
+        // H - Set if borrow from bit 4.
+        // C - Not affected.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // DEC          A           3D      4
+        // DEC          B           05      4
+        // DEC          C           0D      4
+        // DEC          D           15      4
+        // DEC          E           1D      4
+        // DEC          H           25      4
+        // DEC          L           2D      4
+        // DEC          (HL)        35      12
+        private void DEC_n(byte opcode)
+        {
+            ushort original;
+            switch (opcode)
+            {
+                case 0x3D:
+                    original = Reg_A--;
+                    lastOpCycles = 4;
+                    break;
+                case 0x05:
+                    original = Reg_B--;
+                    lastOpCycles = 4;
+                    break;
+                case 0x0D:
+                    original = Reg_C--;
+                    lastOpCycles = 4;
+                    break;
+                case 0x15:
+                    original = Reg_D--;
+                    lastOpCycles = 4;
+                    break;
+                case 0x1D:
+                    original = Reg_E--;
+                    lastOpCycles = 4;
+                    break;
+                case 0x25:
+                    original = Reg_H--;
+                    lastOpCycles = 4;
+                    break;
+                case 0x2D:
+                    original = Reg_L--;
+                    lastOpCycles = 4;
+                    break;
+                case 0x35:
+                    original = _mmu.ReadByte(Reg_HL);
+                    _mmu.WriteByte(Reg_HL, (byte)(_mmu.ReadByte(Reg_HL) - 1));
+                    lastOpCycles = 12;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag((byte)(original - 1) == 0);
+            AffectSubFlag(true);
+            AffectHalfCarryFlag(((byte)(original - 1) & 0x10) == 0x10);
+        }
+
+        #endregion
+
+        #region 16-Bit Arithmetic
+
+        // 1. ADD HL,n (p.90)
+        //
+        // - Description -
+        // Add n to HL.
+        //
+        // - Use with -
+        // n = BC, DE, HL, SP
+        //
+        // - Flags affected -
+        // Z - Not affected.
+        // N - Reset.
+        // H - Set if borrow from bit 11.
+        // C - Set if borrow from bit 15.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // ADD          HL, BC      09      8
+        // ADD          HL, DE      19      8
+        // ADD          HL, HL      29      8
+        // ADD          HL, SP      39      8
+        private void ADD_HL_n(byte opcode)
+        {
+            uint result;
+            switch (opcode)
+            {
+                case 0x09:
+                    result = (uint)(Reg_HL + Reg_BC);
+                    lastOpCycles = 8;
+                    break;
+                case 0x19:
+                    result = (uint)(Reg_HL + Reg_DE);
+                    lastOpCycles = 8;
+                    break;
+                case 0x29:
+                    result = (uint)(Reg_HL + Reg_HL);
+                    lastOpCycles = 8;
+                    break;
+                case 0x39:
+                    result = (uint)(Reg_HL + Reg_SP);
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            Reg_HL = (ushort)result;
+
+            AffectSubFlag(false);
+            AffectHalfCarryFlag((((result & 0xFFF) + 1) & 0x1000) == 0x1000);
+            AffectCarryFlag((((result & 0xFFFF) + 1) & 0x10000) == 0x10000);
+        }
+
+        // 2. ADD SP,n (p.91)
+        //
+        // - Description -
+        // Add n to SP.
+        //
+        // - Use with -
+        // n = one byte signed immediate value (#).
+        //
+        // - Flags affected -
+        // Z - Reset.
+        // N - Reset.
+        // H - Set or reset according to operation.
+        // C - Set or reset according to operation.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // ADD          SP, #       E8      16
+        private void ADD_SP_n(byte opcode)
+        {
+            uint result;
+            switch (opcode)
+            {
+                case 0xE8:
+                    var signedVal = Reg_PC > 127
+                        ? -((~Reg_PC + 1) & 0xFF)
+                        : Reg_PC;
+                    Reg_PC++;
+                    result = (uint)(Reg_SP + signedVal);
+                    lastOpCycles = 16;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            Reg_SP = (ushort)result;
+
+            AffectZeroFlag(false);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag((((result & 0xFFF) + 1) & 0x1000) == 0x1000);
+            AffectCarryFlag((((result & 0xFFFF) + 1) & 0x10000) == 0x10000);
+        }
+
+        // 3. INC nn (p.92)
+        //
+        // - Description -
+        // Increment register nn.
+        //
+        // - Use with -
+        // n = BC, DE, HL, SP
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // INC          BC          03      8
+        // INC          DE          13      8
+        // INC          HL          23      8
+        // INC          SP          33      8
+        private void INC_nn(byte opcode)
+        {
+            switch (opcode)
+            {
+                case 0x03:
+                    Reg_BC++;
+                    lastOpCycles = 8;
+                    break;
+                case 0x13:
+                    Reg_DE++;
+                    lastOpCycles = 8;
+                    break;
+                case 0x23:
+                    Reg_HL++;
+                    lastOpCycles = 8;
+                    break;
+                case 0x33:
+                    Reg_SP++;
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+        }
+
+        // 4. DEC nn (p.93)
+        //
+        // - Description -
+        // Decrement register nn.
+        //
+        // - Use with -
+        // n = BC, DE, HL, SP
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // DEC          BC          0B      8
+        // DEC          DE          1B      8
+        // DEC          HL          2B      8
+        // DEC          SP          3B      8
+        private void DEC_nn(byte opcode)
+        {
+            switch (opcode)
+            {
+                case 0x0B:
+                    Reg_BC--;
+                    lastOpCycles = 8;
+                    break;
+                case 0x1B:
+                    Reg_DE--;
+                    lastOpCycles = 8;
+                    break;
+                case 0x2B:
+                    Reg_HL--;
+                    lastOpCycles = 8;
+                    break;
+                case 0x3B:
+                    Reg_SP--;
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
         }
 
         #endregion
