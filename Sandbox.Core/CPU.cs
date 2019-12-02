@@ -6,15 +6,19 @@ namespace Sandbox.Core
 {
     public partial class CPU
     {
-        public readonly MMU _mmu;
+        public readonly MMU mmu;
 
         public List<Action> Map { get; private set; }
         public List<Action> CbMap { get; private set; }
 
-        public int totalCycles;     //Number of clock cycles that have progressed since boot
-        public int lastOpCycles;    //Number of clock cycles from last opCode
+        private int totalCycles;        //Number of clock cycles that have progressed since boot
+        private int lastOpCycles;       //Number of clock cycles from last opCode
 
-        private bool _verbose;      //Used only for debugging purposes
+        private bool inHaltedState;     //Skips the tick loop while cpu is in a reduced power state
+        private bool inStoppedState;    //Halts the cpu and lcd both
+        private bool interruptsEnabled; //Enables or disables the check for interrupts
+
+        private bool _verbose;          //Determines whether verbose logging is enabled
         public bool continueOperation = true;
 
         public void Start(bool verbose)
@@ -25,9 +29,14 @@ namespace Sandbox.Core
             {
                 if (_verbose) Console.WriteLine("-- CPU Loop --");
 
-                Tick();
+                if (!inHaltedState || !inStoppedState)
+                    Tick();
+                else
+                    totalCycles += 4;
 
                 if (_verbose) Debug_LogRegisters();
+
+                //Check for interrupts
 
                 //Check for break loop
                 if (!continueOperation)
@@ -43,7 +52,7 @@ namespace Sandbox.Core
             if (_verbose) Console.WriteLine($"PC: 0x{Reg_PC:X2}");
 
             //Fetch instruction from memory using program counter
-            var opCode = _mmu.ReadByte(Reg_PC);
+            var opCode = mmu.ReadByte(Reg_PC);
 
             if (_verbose) Console.WriteLine($"OPCODE: 0x{opCode:X2}");
 
@@ -55,10 +64,6 @@ namespace Sandbox.Core
             {
                 Map[opCode]();
             }
-            catch (InstructionNotImplementedException exception)
-            {
-                Console.WriteLine(exception.Message);
-            }
             catch (Exception exception)
             {
                 Console.WriteLine($"!!! SYSTEM EXCEPTION: {exception.Message}");
@@ -68,12 +73,11 @@ namespace Sandbox.Core
             //Update total clock time
             totalCycles += lastOpCycles;
 
-            //Check for interrupts
         }
 
         public CPU(MMU mmu)
         {
-            _mmu = mmu;
+            this.mmu = mmu;
 
             Reg_A = 0x00;
             Reg_F = 0x00;
@@ -439,13 +443,13 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x06:
-                    Reg_B = _mmu.ReadByte(Reg_PC++);
+                    Reg_B = mmu.ReadByte(Reg_PC++);
                     break;
                 case 0x0E:
-                    Reg_C = _mmu.ReadByte(Reg_PC++);
+                    Reg_C = mmu.ReadByte(Reg_PC++);
                     break;
                 case 0x3E:
-                    Reg_A = _mmu.ReadByte(Reg_PC++);
+                    Reg_A = mmu.ReadByte(Reg_PC++);
                     break;
                 default:
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
@@ -554,7 +558,7 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x7E:
-                    Reg_A = _mmu.ReadByte(Reg_HL);
+                    Reg_A = mmu.ReadByte(Reg_HL);
                     lastOpCycles = 8;
                     break;
                 case 0x40:
@@ -582,7 +586,7 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x46:
-                    Reg_B = _mmu.ReadByte(Reg_HL);
+                    Reg_B = mmu.ReadByte(Reg_HL);
                     lastOpCycles = 8;
                     break;
                 case 0x48:
@@ -610,7 +614,7 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x4E:
-                    Reg_C = _mmu.ReadByte(Reg_HL);
+                    Reg_C = mmu.ReadByte(Reg_HL);
                     lastOpCycles = 8;
                     break;
                 case 0x50:
@@ -638,7 +642,7 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x56:
-                    Reg_D = _mmu.ReadByte(Reg_HL);
+                    Reg_D = mmu.ReadByte(Reg_HL);
                     lastOpCycles = 8;
                     break;
                 case 0x58:
@@ -666,7 +670,7 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x5E:
-                    Reg_E = _mmu.ReadByte(Reg_HL);
+                    Reg_E = mmu.ReadByte(Reg_HL);
                     lastOpCycles = 8;
                     break;
                 case 0x60:
@@ -694,7 +698,7 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x66:
-                    Reg_H = _mmu.ReadByte(Reg_HL);
+                    Reg_H = mmu.ReadByte(Reg_HL);
                     lastOpCycles = 8;
                     break;
                 case 0x68:
@@ -722,35 +726,35 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x6E:
-                    Reg_L = _mmu.ReadByte(Reg_HL);
+                    Reg_L = mmu.ReadByte(Reg_HL);
                     lastOpCycles = 8;
                     break;
                 case 0x70:
-                    _mmu.WriteByte(Reg_HL, Reg_B);
+                    mmu.WriteByte(Reg_HL, Reg_B);
                     lastOpCycles = 8;
                     break;
                 case 0x71:
-                    _mmu.WriteByte(Reg_HL, Reg_C);
+                    mmu.WriteByte(Reg_HL, Reg_C);
                     lastOpCycles = 8;
                     break;
                 case 0x72:
-                    _mmu.WriteByte(Reg_HL, Reg_D);
+                    mmu.WriteByte(Reg_HL, Reg_D);
                     lastOpCycles = 8;
                     break;
                 case 0x73:
-                    _mmu.WriteByte(Reg_HL, Reg_E);
+                    mmu.WriteByte(Reg_HL, Reg_E);
                     lastOpCycles = 8;
                     break;
                 case 0x74:
-                    _mmu.WriteByte(Reg_HL, Reg_H);
+                    mmu.WriteByte(Reg_HL, Reg_H);
                     lastOpCycles = 8;
                     break;
                 case 0x75:
-                    _mmu.WriteByte(Reg_HL, Reg_L);
+                    mmu.WriteByte(Reg_HL, Reg_L);
                     lastOpCycles = 8;
                     break;
                 case 0x36:
-                    _mmu.WriteByte(Reg_HL, _mmu.ReadByte(Reg_PC++));
+                    mmu.WriteByte(Reg_HL, mmu.ReadByte(Reg_PC++));
                     lastOpCycles = 12;
                     break;
                 default:
@@ -814,24 +818,24 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x0A:
-                    Reg_A = _mmu.ReadByte(Reg_BC);
+                    Reg_A = mmu.ReadByte(Reg_BC);
                     lastOpCycles = 8;
                     break;
                 case 0x1A:
-                    Reg_A = _mmu.ReadByte(Reg_DE);
+                    Reg_A = mmu.ReadByte(Reg_DE);
                     lastOpCycles = 8;
                     break;
                 case 0x7E:
-                    Reg_A = _mmu.ReadByte(Reg_HL);
+                    Reg_A = mmu.ReadByte(Reg_HL);
                     lastOpCycles = 8;
                     break;
                 case 0xFA:
-                    Reg_A = _mmu.ReadByte(_mmu.ReadWord(Reg_PC));
+                    Reg_A = mmu.ReadByte(mmu.ReadWord(Reg_PC));
                     Reg_PC += 2;
                     lastOpCycles = 16;
                     break;
                 case 0x3E:
-                    Reg_A = _mmu.ReadByte(Reg_PC++);
+                    Reg_A = mmu.ReadByte(Reg_PC++);
                     lastOpCycles = 8;
                     break;
                 default:
@@ -894,19 +898,19 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x02:
-                    _mmu.WriteByte(Reg_BC, Reg_A);
+                    mmu.WriteByte(Reg_BC, Reg_A);
                     lastOpCycles = 8;
                     break;
                 case 0x12:
-                    _mmu.WriteByte(Reg_DE, Reg_A);
+                    mmu.WriteByte(Reg_DE, Reg_A);
                     lastOpCycles = 8;
                     break;
                 case 0x77:
-                    _mmu.WriteByte(Reg_HL, Reg_A);
+                    mmu.WriteByte(Reg_HL, Reg_A);
                     lastOpCycles = 8;
                     break;
                 case 0xEA:
-                    _mmu.WriteByte(_mmu.ReadWord(Reg_PC), Reg_A);
+                    mmu.WriteByte(mmu.ReadWord(Reg_PC), Reg_A);
                     Reg_PC += 2;
                     lastOpCycles = 16;
                     break;
@@ -929,7 +933,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0xF2:
-                    Reg_A = _mmu.ReadByte((byte)(0xFF00 + Reg_C));
+                    Reg_A = mmu.ReadByte((byte)(0xFF00 + Reg_C));
                     lastOpCycles = 8;
                     break;
                 default:
@@ -950,7 +954,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0xF2:
-                    _mmu.WriteByte((byte)(0xFF00 + Reg_C), Reg_A);
+                    mmu.WriteByte((byte)(0xFF00 + Reg_C), Reg_A);
                     lastOpCycles = 8;
                     break;
                 default:
@@ -974,7 +978,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x3A:
-                    Reg_A = _mmu.ReadByte(Reg_HL--);
+                    Reg_A = mmu.ReadByte(Reg_HL--);
                     lastOpCycles = 8;
                     break;
                 default:
@@ -998,7 +1002,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x32:
-                    _mmu.WriteByte(Reg_HL--, Reg_A);
+                    mmu.WriteByte(Reg_HL--, Reg_A);
                     lastOpCycles = 8;
                     break;
                 default:
@@ -1022,7 +1026,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x3A:
-                    Reg_A = _mmu.ReadByte(Reg_HL++);
+                    Reg_A = mmu.ReadByte(Reg_HL++);
                     lastOpCycles = 8;
                     break;
                 default:
@@ -1046,7 +1050,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x32:
-                    _mmu.WriteByte(Reg_HL++, Reg_A);
+                    mmu.WriteByte(Reg_HL++, Reg_A);
                     lastOpCycles = 8;
                     break;
                 default:
@@ -1070,7 +1074,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0xE0:
-                    _mmu.WriteByte((ushort)(0xFF00 + _mmu.ReadByte(Reg_PC++)), Reg_A);
+                    mmu.WriteByte((ushort)(0xFF00 + mmu.ReadByte(Reg_PC++)), Reg_A);
                     lastOpCycles = 12;
                     break;
                 default:
@@ -1094,7 +1098,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0xE0:
-                    Reg_A = _mmu.ReadByte((byte)(0xFF00 + _mmu.ReadByte(Reg_PC++)));
+                    Reg_A = mmu.ReadByte((byte)(0xFF00 + mmu.ReadByte(Reg_PC++)));
                     lastOpCycles = 12;
                     break;
                 default:
@@ -1126,19 +1130,19 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x01:
-                    Reg_BC = _mmu.ReadWord(Reg_PC);
+                    Reg_BC = mmu.ReadWord(Reg_PC);
                     Reg_PC += 2;
                     break;
                 case 0x11:
-                    Reg_DE = _mmu.ReadWord(Reg_PC);
+                    Reg_DE = mmu.ReadWord(Reg_PC);
                     Reg_PC += 2;
                     break;
                 case 0x21:
-                    Reg_HL = _mmu.ReadWord(Reg_PC);
+                    Reg_HL = mmu.ReadWord(Reg_PC);
                     Reg_PC += 2;
                     break;
                 case 0x31:
-                    Reg_SP = _mmu.ReadWord(Reg_PC);
+                    Reg_SP = mmu.ReadWord(Reg_PC);
                     Reg_PC += 2;
                     break;
                 default:
@@ -1220,7 +1224,7 @@ namespace Sandbox.Core
             switch(opcode)
             {
                 case 0x08:
-                    _mmu.WriteWord((ushort)(_mmu.ReadWord(Reg_PC)), Reg_SP);
+                    mmu.WriteWord((ushort)(mmu.ReadWord(Reg_PC)), Reg_SP);
                     Reg_PC += 2;
                     lastOpCycles = 20;
                     break;
@@ -1249,22 +1253,22 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0xF5:
-                    _mmu.WriteWord(Reg_SP, Reg_AF);
+                    mmu.WriteWord(Reg_SP, Reg_AF);
                     Reg_SP -= 2;
                     lastOpCycles = 16;
                     break;
                 case 0xC5:
-                    _mmu.WriteWord(Reg_SP, Reg_BC);
+                    mmu.WriteWord(Reg_SP, Reg_BC);
                     Reg_SP -= 2;
                     lastOpCycles = 16;
                     break;
                 case 0xD5:
-                    _mmu.WriteWord(Reg_SP, Reg_DE);
+                    mmu.WriteWord(Reg_SP, Reg_DE);
                     Reg_SP -= 2;
                     lastOpCycles = 16;
                     break;
                 case 0xE5:
-                    _mmu.WriteWord(Reg_SP, Reg_HL);
+                    mmu.WriteWord(Reg_SP, Reg_HL);
                     Reg_SP -= 2;
                     lastOpCycles = 16;
                     break;
@@ -1293,22 +1297,22 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0xF1:
-                    Reg_AF = _mmu.ReadWord(Reg_SP);
+                    Reg_AF = mmu.ReadWord(Reg_SP);
                     Reg_SP += 2;
                     lastOpCycles = 12;
                     break;
                 case 0xC1:
-                    Reg_BC = _mmu.ReadWord(Reg_SP);
+                    Reg_BC = mmu.ReadWord(Reg_SP);
                     Reg_SP += 2;
                     lastOpCycles = 12;
                     break;
                 case 0xD1:
-                    Reg_DE = _mmu.ReadWord(Reg_SP);
+                    Reg_DE = mmu.ReadWord(Reg_SP);
                     Reg_SP += 2;
                     lastOpCycles = 12;
                     break;
                 case 0xE1:
-                    Reg_HL = _mmu.ReadWord(Reg_SP);
+                    Reg_HL = mmu.ReadWord(Reg_SP);
                     Reg_SP += 2;
                     lastOpCycles = 12;
                     break;
@@ -1380,11 +1384,11 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x86:
-                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_HL));
+                    result = (ushort)(Reg_A + mmu.ReadByte(Reg_HL));
                     lastOpCycles = 8;
                     break;
                 case 0xC6:
-                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_PC++));
+                    result = (ushort)(Reg_A + mmu.ReadByte(Reg_PC++));
                     lastOpCycles = 8;
                     break;
                 default:
@@ -1458,11 +1462,11 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x86:
-                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_HL) + (GetCarryFlag() ? 1 : 0));
+                    result = (ushort)(Reg_A + mmu.ReadByte(Reg_HL) + (GetCarryFlag() ? 1 : 0));
                     lastOpCycles = 8;
                     break;
                 case 0xC6:
-                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_PC++) + (GetCarryFlag() ? 1 : 0));
+                    result = (ushort)(Reg_A + mmu.ReadByte(Reg_PC++) + (GetCarryFlag() ? 1 : 0));
                     lastOpCycles = 8;
                     break;
                 default:
@@ -1536,11 +1540,11 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x96:
-                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_HL));
+                    result = (ushort)(Reg_A - mmu.ReadByte(Reg_HL));
                     lastOpCycles = 8;
                     break;
                 case 0xD6:
-                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_PC++));
+                    result = (ushort)(Reg_A - mmu.ReadByte(Reg_PC++));
                     lastOpCycles = 8;
                     break;
                 default:
@@ -1614,11 +1618,11 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x86:
-                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_HL) + (GetCarryFlag() ? 1 : 0));
+                    result = (ushort)(Reg_A - mmu.ReadByte(Reg_HL) + (GetCarryFlag() ? 1 : 0));
                     lastOpCycles = 8;
                     break;
                 case 0xC6:
-                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_PC++) + (GetCarryFlag() ? 1 : 0));
+                    result = (ushort)(Reg_A - mmu.ReadByte(Reg_PC++) + (GetCarryFlag() ? 1 : 0));
                     lastOpCycles = 8;
                     break;
                 default:
@@ -1692,11 +1696,11 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0xA6:
-                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_HL));
+                    result = (ushort)(Reg_A + mmu.ReadByte(Reg_HL));
                     lastOpCycles = 8;
                     break;
                 case 0xE6:
-                    result = (ushort)(Reg_A + _mmu.ReadByte(Reg_PC++));
+                    result = (ushort)(Reg_A + mmu.ReadByte(Reg_PC++));
                     lastOpCycles = 8;
                     break;
                 default:
@@ -1770,11 +1774,11 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0xB6:
-                    result = (ushort)(Reg_A | _mmu.ReadByte(Reg_HL));
+                    result = (ushort)(Reg_A | mmu.ReadByte(Reg_HL));
                     lastOpCycles = 8;
                     break;
                 case 0xF6:
-                    result = (ushort)(Reg_A | _mmu.ReadByte(Reg_PC++));
+                    result = (ushort)(Reg_A | mmu.ReadByte(Reg_PC++));
                     lastOpCycles = 8;
                     break;
                 default:
@@ -1848,11 +1852,11 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0xAE:
-                    result = (ushort)(Reg_A ^ _mmu.ReadByte(Reg_HL));
+                    result = (ushort)(Reg_A ^ mmu.ReadByte(Reg_HL));
                     lastOpCycles = 8;
                     break;
                 case 0xEE:
-                    result = (ushort)(Reg_A ^ _mmu.ReadByte(Reg_PC++));
+                    result = (ushort)(Reg_A ^ mmu.ReadByte(Reg_PC++));
                     lastOpCycles = 8;
                     break;
                 default:
@@ -1928,11 +1932,11 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0xBE:
-                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_HL));
+                    result = (ushort)(Reg_A - mmu.ReadByte(Reg_HL));
                     lastOpCycles = 8;
                     break;
                 case 0xFE:
-                    result = (ushort)(Reg_A - _mmu.ReadByte(Reg_PC++));
+                    result = (ushort)(Reg_A - mmu.ReadByte(Reg_PC++));
                     lastOpCycles = 8;
                     break;
                 default:
@@ -2003,8 +2007,8 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x34:
-                    original = _mmu.ReadByte(Reg_HL);
-                    _mmu.WriteByte(Reg_HL, (byte)(_mmu.ReadByte(Reg_HL) + 1));
+                    original = mmu.ReadByte(Reg_HL);
+                    mmu.WriteByte(Reg_HL, (byte)(mmu.ReadByte(Reg_HL) + 1));
                     lastOpCycles = 12;
                     break;
                 default:
@@ -2074,8 +2078,8 @@ namespace Sandbox.Core
                     lastOpCycles = 4;
                     break;
                 case 0x35:
-                    original = _mmu.ReadByte(Reg_HL);
-                    _mmu.WriteByte(Reg_HL, (byte)(_mmu.ReadByte(Reg_HL) - 1));
+                    original = mmu.ReadByte(Reg_HL);
+                    mmu.WriteByte(Reg_HL, (byte)(mmu.ReadByte(Reg_HL) - 1));
                     lastOpCycles = 12;
                     break;
                 default:
@@ -2265,12 +2269,294 @@ namespace Sandbox.Core
 
         #endregion
 
-        //No operation (DP, 97)
+        #region Miscellaneous
+
+        // 1. SWAP n (p.94)
+        //
+        // - Description -
+        // Swap upper & lower nybbles of n.
+        //
+        // - Use with -
+        // n = A, B, C, D, E, H, L, (HL)
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Reset.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // SWAP         A           CB 37   8
+        // SWAP         B           CB 30   8
+        // SWAP         C           CB 31   8
+        // SWAP         D           CB 32   8
+        // SWAP         E           CB 33   8
+        // SWAP         H           CB 34   8
+        // SWAP         L           CB 35   8
+        // SWAP         (HL)        CB 36   16
+        private void SWAP_n(byte opcode)
+        {
+            ushort result;
+            switch (opcode)
+            {
+                case 0x37:
+                    result = (ushort)((Reg_A & 0x0F) << 4 | (Reg_A & 0xF0));
+                    Reg_A = (byte)result;
+                    lastOpCycles = 8;
+                    break;
+                case 0x30:
+                    result = (ushort)((Reg_B & 0x0F) << 4 | (Reg_B & 0xF0));
+                    Reg_B = (byte)result;
+                    lastOpCycles = 8;
+                    break;
+                case 0x31:
+                    result = (ushort)((Reg_C & 0x0F) << 4 | (Reg_C & 0xF0));
+                    Reg_C = (byte)result;
+                    lastOpCycles = 8;
+                    break;
+                case 0x32:
+                    result = (ushort)((Reg_D & 0x0F) << 4 | (Reg_D & 0xF0));
+                    Reg_D = (byte)result;
+                    lastOpCycles = 8;
+                    break;
+                case 0x33:
+                    result = (ushort)((Reg_E & 0x0F) << 4 | (Reg_E & 0xF0));
+                    Reg_E = (byte)result;
+                    lastOpCycles = 8;
+                    break;
+                case 0x34:
+                    result = (ushort)((Reg_H & 0x0F) << 4 | (Reg_H & 0xF0));
+                    Reg_H = (byte)result;
+                    lastOpCycles = 8;
+                    break;
+                case 0x35:
+                    result = (ushort)((Reg_L & 0x0F) << 4 | (Reg_L & 0xF0));
+                    Reg_L = (byte)result;
+                    lastOpCycles = 8;
+                    break;
+                case 0x36:
+                    var dataFromMem = mmu.ReadByte(Reg_HL);
+                    result = (ushort)((dataFromMem & 0x0F) << 4 | (dataFromMem & 0xF0));
+                    mmu.WriteByte(Reg_HL, (byte)result);
+                    lastOpCycles = 16;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(false);
+        }
+
+        // 2. DAA (p.95)
+        //
+        // - Description -
+        // Decimal adjust register A.
+        // This instruction adjusts register A so that the
+        // correct representation of Binary Coded Decimal (BCD)
+        // is obtained.
+        //
+        // - Flags affected -
+        // Z - Set if register A is zero.
+        // N - Not affected.
+        // H - Reset.
+        // C - Set or reset according to operation.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // DAA          -/-         27      4
+        //
+        // Implementation borrowed from https://ehaskins.com/2018-01-30%20Z80%20DAA/
+        private void DAA(byte opcode)
+        {
+            byte result;
+            bool setCarryFlag = false;
+            switch (opcode)
+            {
+                case 0x27:
+                    byte correction = 0;
+                    if (GetHalfCarryFlag() || (!GetSubFlag() && (Reg_A & 0xF) > 9))
+                    {
+                        correction |= 0x6;
+                    }
+                    if (GetCarryFlag() || (!GetSubFlag() && Reg_A > 0x99))
+                    {
+                        correction |= 0x60;
+                        setCarryFlag = GetCarryFlag();
+                    }
+                    result = (byte)(Reg_A + (GetSubFlag() ? -correction : correction));
+                    Reg_A = result;
+                    lastOpCycles = 4;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(setCarryFlag);
+        }
+
+        // 3. CPL (p.95)
+        //
+        // - Description -
+        // Complement A register. (Flip all bits.)
+        //
+        // - Flags affected -
+        // Z - Not affected.
+        // N - Set.
+        // H - Set.
+        // C - Not affected.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // CPL          -/-         2F      4
+        private void CPL(byte opcode)
+        {
+            byte result;
+            switch (opcode)
+            {
+                case 0x2F:
+                    result = (byte)~Reg_A;
+                    Reg_A = result;
+                    lastOpCycles = 4;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectSubFlag(true);
+            AffectHalfCarryFlag(true);
+        }
+
+        // 4. CCF (p.96)
+        //
+        // - Description -
+        // Complement carry flag.
+        // If C flag is set, then reset it.
+        // If C flag is reset, then set it.
+        //
+        // - Flags affected -
+        // Z - Not affected.
+        // N - Reset.
+        // H - Reset.
+        // C - Complemented.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // CCF          -/-         3F      4
+        private void CCF(byte opcode)
+        {
+            lastOpCycles = 4;
+
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(!GetCarryFlag());
+        }
+
+        // 5. SCF (p.96)
+        //
+        // - Description -
+        // Set carry flag.
+        //
+        // - Flags affected -
+        // Z - Not affected.
+        // N - Reset.
+        // H - Reset.
+        // C - Set.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // SCF          -/-         37      4
+        private void SCF(byte opcode)
+        {
+            lastOpCycles = 4;
+
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(true);
+        }
+
+        // 6. NOP (p.97)
+        //
+        // - Description -
+        // No operation.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // NOP          -/-         00      4
         private void NOP(byte opcode)
         {
             lastOpCycles = 4;
-            return;
         }
+
+        // 7. HALT (p.97)
+        //
+        // - Description -
+        // Power down CPU until an interrupt occurs. Use this
+        // whenever possible to reduce energy consumption.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // HALT         -/-         76      4
+        private void HALT(byte opcode)
+        {
+            lastOpCycles = 4;
+            inHaltedState = true;
+        }
+
+        // 8. STOP (p.97)
+        //
+        // - Description -
+        // Halt CPU & LCD display until button pressed.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // STOP         -/-         10 00   4
+        private void STOP(byte opcode)
+        {
+            lastOpCycles = 4;
+            inHaltedState = true;
+            inStoppedState = true;
+        }
+
+        // 9. DI (p.98)
+        //
+        // - Description -
+        // This instruction disables interrups but not
+        // immediately. Interrupts are disabled after
+        // instruction following DI is executed.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // DI           -/-         F3      4
+        private void DI(byte opcode)
+        {
+            lastOpCycles = 4;
+            interruptsEnabled = false;
+        }
+
+        // 10. EI (p.98)
+        //
+        // - Description -
+        // Enable interrupts. This instruction enables interrupts
+        // but not immediately. Interrupts are enabled after
+        // instruction following EI is executed.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // EI           -/-         F3      4
+        private void EI(byte opcode)
+        {
+            lastOpCycles = 4;
+            interruptsEnabled = true;
+        }
+
+        #endregion
+
 
         //Load into register1 from memory address stored in register2 (DP, 65)
         private void LD_r16m(byte opcode)
@@ -2278,10 +2564,10 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x0A:
-                    Reg_A = _mmu.ReadByte(Reg_BC);
+                    Reg_A = mmu.ReadByte(Reg_BC);
                     break;
                 case 0x1A:
-                    Reg_A = _mmu.ReadByte(Reg_DE);
+                    Reg_A = mmu.ReadByte(Reg_DE);
                     break;
                 default:
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
@@ -2297,9 +2583,9 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x08:
-                    var addr = (ushort)(_mmu.ReadWord(Reg_PC));
+                    var addr = (ushort)(mmu.ReadWord(Reg_PC));
                     Reg_PC += 2;
-                    _mmu.WriteWord(addr, Reg_SP);
+                    mmu.WriteWord(addr, Reg_SP);
                     break;
                 default:
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
@@ -2314,7 +2600,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x32:
-                    _mmu.WriteByte(Reg_HL, Reg_A);
+                    mmu.WriteByte(Reg_HL, Reg_A);
                     Reg_HL--;
                     break;
                 default:
@@ -2331,13 +2617,13 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x02:
-                    _mmu.WriteByte(Reg_BC, Reg_A);
+                    mmu.WriteByte(Reg_BC, Reg_A);
                     break;
                 case 0x77:
-                    _mmu.WriteByte(Reg_HL, Reg_A);
+                    mmu.WriteByte(Reg_HL, Reg_A);
                     break;
                 case 0xE2:
-                    _mmu.WriteByte(Reg_C, Reg_A);
+                    mmu.WriteByte(Reg_C, Reg_A);
                     break;
                 default:
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
@@ -2352,8 +2638,8 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0xE0:
-                    var addr = (ushort)(0xFF00 + _mmu.ReadByte(Reg_PC++));
-                    _mmu.WriteByte(addr, Reg_A);
+                    var addr = (ushort)(0xFF00 + mmu.ReadByte(Reg_PC++));
+                    mmu.WriteByte(addr, Reg_A);
                     break;
                 default:
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
@@ -2522,8 +2808,8 @@ namespace Sandbox.Core
         private void CALL_d16m(byte opcode)
         {
             Reg_SP -= 2;
-            _mmu.WriteWord(Reg_SP, (ushort)(Reg_PC + 2));
-            Reg_PC = _mmu.ReadWord(Reg_PC);
+            mmu.WriteWord(Reg_SP, (ushort)(Reg_PC + 2));
+            Reg_PC = mmu.ReadWord(Reg_PC);
 
             lastOpCycles = 4;
         }
@@ -2543,8 +2829,8 @@ namespace Sandbox.Core
             }
 
             Reg_SP -= 2;
-            _mmu.WriteWord(Reg_SP, (ushort)(Reg_PC + 2));
-            Reg_PC = _mmu.ReadWord(Reg_PC);
+            mmu.WriteWord(Reg_SP, (ushort)(Reg_PC + 2));
+            Reg_PC = mmu.ReadWord(Reg_PC);
 
             lastOpCycles = 24;
         }
@@ -2565,7 +2851,7 @@ namespace Sandbox.Core
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
             }
 
-            var signed = unchecked((sbyte)_mmu.ReadByte(Reg_PC++));
+            var signed = unchecked((sbyte)mmu.ReadByte(Reg_PC++));
 
             Reg_PC = signed < 0
                     ? (ushort)(Reg_PC - (ushort)(signed * (-1)))
@@ -2577,7 +2863,7 @@ namespace Sandbox.Core
         //Call instruction at index PC+1 from CB map
         private void CB(byte opcode)
         {
-            CbMap[_mmu.ReadByte(Reg_PC++)]();
+            CbMap[mmu.ReadByte(Reg_PC++)]();
             lastOpCycles += 4;
         }
 
@@ -2605,10 +2891,10 @@ namespace Sandbox.Core
 
         public void RLC_HLm()       //RLC (HL)
         {
-            bool toCarry = GetBit7(_mmu.ReadByte(Reg_HL));
-            _mmu.WriteByte(Reg_HL, (byte)((_mmu.ReadByte(Reg_HL) << 1) + (toCarry ? 1 : 0)));
+            bool toCarry = GetBit7(mmu.ReadByte(Reg_HL));
+            mmu.WriteByte(Reg_HL, (byte)((mmu.ReadByte(Reg_HL) << 1) + (toCarry ? 1 : 0)));
 
-            AffectZeroFlag(_mmu.ReadByte(Reg_HL) == 0);
+            AffectZeroFlag(mmu.ReadByte(Reg_HL) == 0);
             AffectSubFlag(false);
             AffectHalfCarryFlag(false);
             AffectCarryFlag(toCarry);
