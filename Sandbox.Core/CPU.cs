@@ -2281,12 +2281,7 @@ namespace Sandbox.Core
         //
         // - Flags affected -
         // Z - Set if result is zero.
-        // N - Reset.
-        // H - Reset.
-        // C - Reset.
-        //
-        // - Opcodes -
-        // Instruction  Parameters  Opcode  Cycles
+        // N - Reset.7 = GetBit7(Reg_A);ycles
         // SWAP         A           CB 37   8
         // SWAP         B           CB 30   8
         // SWAP         C           CB 31   8
@@ -2557,6 +2552,827 @@ namespace Sandbox.Core
 
         #endregion
 
+        #region Rotates & Shifts
+
+        // 1. RLCA (p.99)
+        //
+        // - Description -
+        // Rotate A left. Old bit 7 to Carry flag.
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 7 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RLCA         -/-         07      4
+        private void RLCA(byte opcode)
+        {
+            bool bit7;
+            byte result;
+            switch (opcode)
+            {
+                case 0x07:
+                    bit7 = GetBit7(Reg_A);
+
+                    result = (byte)(Reg_A << 1);
+                    result = (byte)(result | (bit7 ? 1 : 0));
+                    Reg_A = result;
+
+                    lastOpCycles = 4;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit7);
+        }
+
+        // 2. RLA (p.99)
+        //
+        // - Description -
+        // Rotate A left through Carry flag.
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 7 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RLA          -/-         17      4
+        private void RLA(byte opcode)
+        {
+            bool bit7;
+            byte result;
+            switch (opcode)
+            {
+                case 0x17:
+                    bit7 = GetBit7(Reg_A);
+
+                    result = (byte)(Reg_A << 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_A = result;
+
+                    lastOpCycles = 4;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit7);
+        }
+
+        // 3. RRCA (p.100)
+        //
+        // - Description -
+        // Rotate A right. Old bit 0 to Carry flag.
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 0 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RRCA         -/-         0F      4
+        private void RRCA(byte opcode)
+        {
+            bool bit0;
+            byte result;
+            switch (opcode)
+            {
+                case 0x0F:
+                    bit0 = GetBit0(Reg_A);
+
+                    result = (byte)(Reg_A >> 1);
+                    result = (byte)(result | (bit0 ? 1 : 0));
+                    Reg_A = result;
+
+                    lastOpCycles = 4;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit0);
+        }
+
+        // 4. RRA (p.100)
+        //
+        // - Description -
+        // Rotate A right through Carry flag.
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 0 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RRA          -/-         1F      4
+        private void RRA(byte opcode)
+        {
+            bool bit0;
+            byte result;
+            switch (opcode)
+            {
+                case 0x0F:
+                    bit0 = GetBit0(Reg_A);
+
+                    result = (byte)(Reg_A >> 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_A = result;
+
+                    lastOpCycles = 4;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit0);
+        }
+
+        // 5. RLC n (p.101)
+        //
+        // - Description -
+        // Rotate n left. Old bit 7 to Carry flag.
+        //
+        // - Use with -
+        // n = A,B,C,D,E,H,L,(HL)
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 7 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RLC          A           CB 07   8
+        // RLC          B           CB 00   8
+        // RLC          C           CB 01   8
+        // RLC          D           CB 02   8
+        // RLC          E           CB 03   8
+        // RLC          H           CB 04   8
+        // RLC          L           CB 05   8
+        // RLC          (HL)        CB 06   16
+        private void RLC_n(byte opcode)
+        {
+            bool bit7;
+            byte result;
+            switch (opcode)
+            {
+                case 0x07:
+                    bit7 = GetBit7(Reg_A);
+
+                    result = (byte)(Reg_A << 1);
+                    result = (byte)(result | (bit7 ? 1 : 0));
+                    Reg_A = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x00:
+                    bit7 = GetBit7(Reg_B);
+
+                    result = (byte)(Reg_B << 1);
+                    result = (byte)(result | (bit7 ? 1 : 0));
+                    Reg_B = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x01:
+                    bit7 = GetBit7(Reg_C);
+
+                    result = (byte)(Reg_C << 1);
+                    result = (byte)(result | (bit7 ? 1 : 0));
+                    Reg_C = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x02:
+                    bit7 = GetBit7(Reg_D);
+
+                    result = (byte)(Reg_D << 1);
+                    result = (byte)(result | (bit7 ? 1 : 0));
+                    Reg_D = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x03:
+                    bit7 = GetBit7(Reg_E);
+
+                    result = (byte)(Reg_E << 1);
+                    result = (byte)(result | (bit7 ? 1 : 0));
+                    Reg_E = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x04:
+                    bit7 = GetBit7(Reg_H);
+
+                    result = (byte)(Reg_H << 1);
+                    result = (byte)(result | (bit7 ? 1 : 0));
+                    Reg_H = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x05:
+                    bit7 = GetBit7(Reg_L);
+
+                    result = (byte)(Reg_L << 1);
+                    result = (byte)(result | (bit7 ? 1 : 0));
+                    Reg_L = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x06:
+                    result = mmu.ReadByte(Reg_HL);
+                    bit7 = GetBit7(result);
+
+                    result = (byte)(result << 1);
+                    result = (byte)(result | (bit7 ? 1 : 0));
+                    mmu.WriteByte(Reg_HL, result);
+
+                    lastOpCycles = 16;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit7);
+        }
+
+        // 6. RL n (p.102)
+        //
+        // - Description -
+        // Rotate n left through Carry flag.
+        //
+        // - Use with -
+        // n = A,B,C,D,E,H,L,(HL)
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 7 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RL           A           CB 17   8
+        // RL           B           CB 10   8
+        // RL           C           CB 11   8
+        // RL           D           CB 12   8
+        // RL           E           CB 13   8
+        // RL           H           CB 14   8
+        // RL           L           CB 15   8
+        // RL           (HL)        CB 16   16
+        private void Rl_n(byte opcode)
+        {
+            bool bit7;
+            byte result;
+            switch (opcode)
+            {
+                case 0x17:
+                    bit7 = GetBit7(Reg_A);
+
+                    result = (byte)(Reg_A << 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_A = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x10:
+                    bit7 = GetBit7(Reg_B);
+
+                    result = (byte)(Reg_B << 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_B = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x11:
+                    bit7 = GetBit7(Reg_C);
+
+                    result = (byte)(Reg_C << 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_C = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x12:
+                    bit7 = GetBit7(Reg_D);
+
+                    result = (byte)(Reg_D << 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_D = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x13:
+                    bit7 = GetBit7(Reg_E);
+
+                    result = (byte)(Reg_E << 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_E = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x14:
+                    bit7 = GetBit7(Reg_H);
+
+                    result = (byte)(Reg_H << 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_H = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x15:
+                    bit7 = GetBit7(Reg_L);
+
+                    result = (byte)(Reg_L << 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_L = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x16:
+                    result = mmu.ReadByte(Reg_HL);
+                    bit7 = GetBit7(result);
+
+                    result = (byte)(result << 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    mmu.WriteByte(Reg_HL, result);
+
+                    lastOpCycles = 16;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit7);
+        }
+
+        // 7. RRC n (p.103)
+        //
+        // - Description -
+        // Rotate n right. Old bit 0 to Carry flag.
+        //
+        // - Use with -
+        // n = A,B,C,D,E,H,L,(HL)
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 0 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RRC          A           CB 0F   8
+        // RRC          B           CB 08   8
+        // RRC          C           CB 09   8
+        // RRC          D           CB 0A   8
+        // RRC          E           CB 0B   8
+        // RRC          H           CB 0C   8
+        // RRC          L           CB 0D   8
+        // RRC          (HL)        CB 0E   16
+        private void RRC_n(byte opcode)
+        {
+            bool bit0;
+            byte result;
+            switch (opcode)
+            {
+                case 0x0F:
+                    bit0 = GetBit0(Reg_A);
+
+                    result = (byte)(Reg_A >> 1);
+                    result = (byte)(result | (bit0 ? 1 : 0));
+                    Reg_A = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x08:
+                    bit0 = GetBit0(Reg_B);
+
+                    result = (byte)(Reg_B >> 1);
+                    result = (byte)(result | (bit0 ? 1 : 0));
+                    Reg_B = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x09:
+                    bit0 = GetBit0(Reg_C);
+
+                    result = (byte)(Reg_C >> 1);
+                    result = (byte)(result | (bit0 ? 1 : 0));
+                    Reg_C = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x0A:
+                    bit0 = GetBit0(Reg_D);
+
+                    result = (byte)(Reg_D >> 1);
+                    result = (byte)(result | (bit0 ? 1 : 0));
+                    Reg_D = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x0B:
+                    bit0 = GetBit0(Reg_E);
+
+                    result = (byte)(Reg_E >> 1);
+                    result = (byte)(result | (bit0 ? 1 : 0));
+                    Reg_E = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x0C:
+                    bit0 = GetBit0(Reg_H);
+
+                    result = (byte)(Reg_H >> 1);
+                    result = (byte)(result | (bit0 ? 1 : 0));
+                    Reg_H = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x0D:
+                    bit0 = GetBit0(Reg_L);
+
+                    result = (byte)(Reg_L >> 1);
+                    result = (byte)(result | (bit0 ? 1 : 0));
+                    Reg_L = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x0E:
+                    result = mmu.ReadByte(Reg_HL);
+                    bit0 = GetBit0(result);
+
+                    result = (byte)(result >> 1);
+                    result = (byte)(result | (bit0 ? 1 : 0));
+                    mmu.WriteByte(Reg_HL, result);
+
+                    lastOpCycles = 16;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit0);
+        }
+
+        // 8. RR n (p.104)
+        //
+        // - Description -
+        // Rotate n right through Carry flag.
+        //
+        // - Use with -
+        // n = A,B,C,D,E,H,L,(HL)
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 0 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RR           A           CB 1F   8
+        // RR           B           CB 18   8
+        // RR           C           CB 19   8
+        // RR           D           CB 1A   8
+        // RR           E           CB 1B   8
+        // RR           H           CB 1C   8
+        // RR           L           CB 1D   8
+        // RR           (HL)        CB 1E   16
+        private void RR_n(byte opcode)
+        {
+            bool bit0;
+            byte result;
+            switch (opcode)
+            {
+                case 0x0F:
+                    bit0 = GetBit0(Reg_A);
+
+                    result = (byte)(Reg_A >> 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_A = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x08:
+                    bit0 = GetBit0(Reg_B);
+
+                    result = (byte)(Reg_B >> 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_B = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x09:
+                    bit0 = GetBit0(Reg_C);
+
+                    result = (byte)(Reg_C >> 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_C = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x0A:
+                    bit0 = GetBit0(Reg_D);
+
+                    result = (byte)(Reg_D >> 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_D = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x0B:
+                    bit0 = GetBit0(Reg_E);
+
+                    result = (byte)(Reg_E >> 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_E = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x0C:
+                    bit0 = GetBit0(Reg_H);
+
+                    result = (byte)(Reg_H >> 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_H = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x0D:
+                    bit0 = GetBit0(Reg_L);
+
+                    result = (byte)(Reg_L >> 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    Reg_L = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x0E:
+                    result = mmu.ReadByte(Reg_HL);
+                    bit0 = GetBit0(result);
+
+                    result = (byte)(result >> 1);
+                    result = (byte)(result | (GetCarryFlag() ? 1 : 0));
+                    mmu.WriteByte(Reg_HL, result);
+
+                    lastOpCycles = 16;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit0);
+        }
+
+        // 9. SLA n (p.105)
+        //
+        // - Description -
+        // Shift n left into Carry. LSB of n set to 0.
+        //
+        // - Use with -
+        // n = A,B,C,D,E,H,L,(HL)
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 7 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // SLA           A           CB 27   8
+        // SLA           B           CB 20   8
+        // SLA           C           CB 21   8
+        // SLA           D           CB 22   8
+        // SLA           E           CB 23   8
+        // SLA           H           CB 24   8
+        // SLA           L           CB 25   8
+        // SLA           (HL)        CB 26   16
+        private void SLA_n(byte opcode)
+        {
+            bool bit7;
+            byte result;
+            switch (opcode)
+            {
+                case 0x27:
+                    bit7 = GetBit7(Reg_A);
+
+                    result = (byte)(Reg_A << 1);
+                    Reg_A = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x20:
+                    bit7 = GetBit7(Reg_B);
+
+                    result = (byte)(Reg_B << 1);
+                    Reg_B = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x21:
+                    bit7 = GetBit7(Reg_C);
+
+                    result = (byte)(Reg_C << 1);
+                    Reg_C = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x22:
+                    bit7 = GetBit7(Reg_D);
+
+                    result = (byte)(Reg_D << 1);
+                    Reg_D = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x23:
+                    bit7 = GetBit7(Reg_E);
+
+                    result = (byte)(Reg_E << 1);
+                    Reg_E = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x24:
+                    bit7 = GetBit7(Reg_H);
+
+                    result = (byte)(Reg_H << 1);
+                    Reg_H = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x25:
+                    bit7 = GetBit7(Reg_L);
+
+                    result = (byte)(Reg_L << 1);
+                    Reg_L = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x26:
+                    result = mmu.ReadByte(Reg_HL);
+                    bit7 = GetBit7(result);
+
+                    result = (byte)(result << 1);
+                    mmu.WriteByte(Reg_HL, result);
+
+                    lastOpCycles = 16;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit7);
+        }
+
+        // 10. SRA n (p.106)
+        //
+        // - Description -
+        // Shift n right into Carry. MSB doesn't change.
+        //
+        // - Use with -
+        // n = A,B,C,D,E,H,L,(HL)
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 0 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // SRA           A           CB 2F   8
+        // SRA           B           CB 28   8
+        // SRA           C           CB 29   8
+        // SRA           D           CB 2A   8
+        // SRA           E           CB 2B   8
+        // SRA           H           CB 2C   8
+        // SRA           L           CB 2D   8
+        // SRA           (HL)        CB 2E   16
+        private void SRA_n(byte opcode)
+        {
+            bool bit0;
+            byte result;
+            switch (opcode)
+            {
+                case 0x2F:
+                    bit0 = GetBit0(Reg_A);
+
+                    result = (byte)(Reg_A >> 1);
+                    Reg_A = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x28:
+                    bit0 = GetBit0(Reg_B);
+
+                    result = (byte)(Reg_B >> 1);
+                    Reg_B = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x29:
+                    bit0 = GetBit0(Reg_C);
+
+                    result = (byte)(Reg_C >> 1);
+                    Reg_C = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x2A:
+                    bit0 = GetBit0(Reg_D);
+
+                    result = (byte)(Reg_D >> 1);
+                    Reg_D = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x2B:
+                    bit0 = GetBit0(Reg_E);
+
+                    result = (byte)(Reg_E >> 1);
+                    Reg_E = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x2C:
+                    bit0 = GetBit0(Reg_H);
+
+                    result = (byte)(Reg_H >> 1);
+                    Reg_H = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x2D:
+                    bit0 = GetBit0(Reg_L);
+
+                    result = (byte)(Reg_L >> 1);
+                    Reg_L = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x2E:
+                    result = mmu.ReadByte(Reg_HL);
+                    bit0 = GetBit0(result);
+
+                    result = (byte)(result >> 1);
+                    mmu.WriteByte(Reg_HL, result);
+
+                    lastOpCycles = 16;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit0);
+        }
+
+        #endregion
 
         //Load into register1 from memory address stored in register2 (DP, 65)
         private void LD_r16m(byte opcode)
@@ -2865,18 +3681,6 @@ namespace Sandbox.Core
         {
             CbMap[mmu.ReadByte(Reg_PC++)]();
             lastOpCycles += 4;
-        }
-
-        //Rotate Reg_A left. Carry flag is set to value previously in bit 7
-        private void RLCA(byte opcode)
-        {
-            byte val = Reg_A;
-            Reg_A = (byte)(Reg_A << 1);
-
-            AffectZeroFlag(false);
-            AffectSubFlag(false);
-            AffectHalfCarryFlag(false);
-            AffectCarryFlag(GetBit7(val));
         }
 
         //CB codes
