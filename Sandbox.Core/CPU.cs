@@ -11,6 +11,8 @@ namespace Sandbox.Core
         public List<Action> Map { get; private set; }
         public List<Action> CbMap { get; private set; }
 
+        private bool useCbMap;          //Flag to determine whether the next instruction should use CbMap
+
         private int totalCycles;        //Number of clock cycles that have progressed since boot
         private int lastOpCycles;       //Number of clock cycles from last opCode
 
@@ -25,25 +27,30 @@ namespace Sandbox.Core
         {
             _verbose = verbose;
 
-            for (; ; ) //CPU loop for clock cycles
+            useCbMap = false;
+            inHaltedState = false;
+            inStoppedState = false;
+            interruptsEnabled = false;
+            totalCycles = 0;
+            lastOpCycles = 0;
+
+            for (;;) //CPU loop for clock cycles
             {
                 if (_verbose) Console.WriteLine("-- CPU Loop --");
 
-                if (!inHaltedState || !inStoppedState)
-                    Tick();
-                else
-                    totalCycles += 4;
+                if (!inHaltedState || !inStoppedState) Tick();
+                else totalCycles += 4;
 
                 if (_verbose) Debug_LogRegisters();
 
-                //Check for interrupts
-
-                //Check for break loop
+                //Check for shutdown
                 if (!continueOperation)
                 {
                     if (!_verbose) Console.WriteLine("Shutting down CPU...");
                     break;
                 }
+
+                //TODO: Check for interrupts
             }
         }
 
@@ -51,9 +58,11 @@ namespace Sandbox.Core
         {
             if (_verbose) Console.WriteLine($"PC: 0x{Reg_PC:X2}");
 
-            //Fetch instruction from memory using program counter
-            var opCode = mmu.ReadByte(Reg_PC);
+            if (Reg_PC < 0x0000 || Reg_PC > 0xFFFF)
+                throw new InstructionOutOfRangeException($"Attempted instruction out of range! Instruction: {Reg_PC:X2}");
 
+            //Fetch instruction from memory using program counter
+            var opCode = mmu.ReadByte(Reg_PC++);
             if (_verbose) Console.WriteLine($"OPCODE: 0x{opCode:X2}");
 
             //Increment program counter
@@ -62,12 +71,14 @@ namespace Sandbox.Core
             //Execute instruction
             try
             {
-                Map[opCode]();
+                if (!useCbMap) Map[opCode]();
+                else CbMap[opCode]();
+                useCbMap = false;
             }
             catch (Exception exception)
             {
                 Console.WriteLine($"!!! SYSTEM EXCEPTION: {exception.Message}");
-                //log to file later
+                //TODO: Log to file
             }
 
             //Update total clock time
@@ -92,328 +103,170 @@ namespace Sandbox.Core
 
             Map = new List<Action>
             {
-                //00 - 0F
-                () => NOP(0x00),        //NOP
-                () => LD_n_nn(0x01),     //LD BC,d16
-                () => LDr_r8(0x02),     //LD (BC),A
-                () => INC_16(0x03),        //INC BC
-                () => INC(0x04),        //INC B
-                () => DEC(0x05),        //DEC B
-                () => LD_nn_n(0x06),      //LD B,d8
-                () => RLCA(0x07),       //RLCA
-                () => LDm_r16(0x08),    //LD (a16),SP
-                () => ADD_HL(0x09),     //ADD HL,BC
-                () => LD_r16m(0x0A),    //LD A,(BC)
-                () => DEC(0x0B),        //DEC BC
-                () => INC(0x0C),        //INC C
-                () => DEC(0x0D),        //DEC C
-                () => LD_nn_n(0x0E),      //LD C,d8
-                null,
+                // 00 - 0F
+                () => NOP(0x00),        () => LD_n_nn(0x01),    () => LD_n_A(0x02),     () => INC_nn(0x03),
+                () => INC_n(0x04),      () => DEC_n(0x05),      () => LD_nn_n(0x06),    () => RLCA(0x07),
+                () => LD_nnm_SP(0x08),  () => ADD_HL_n(0x09),   () => LD_A_n(0x0A),     () => DEC_nn(0x0B),
+                () => INC_n(0x0C),      () => DEC_n(0x0D),      () => LD_nn_n(0x0E),    () => RRCA(0x0F),
+                // 10 - 1F
+                () => STOP(0x10),       () => LD_n_nn(0x11),    () => LD_n_A(0x12),     () => INC_nn(0x13),
+                () => INC_n(0x14),      () => DEC_n(0x15),      () => LD_nn_n(0x16),    () => RLA(0x17),
+                () => JR_n(0x18),       () => ADD_HL_n(0x19),   () => LD_A_n(0x1A),     () => DEC_nn(0x1B),
+                () => INC_n(0x1C),      () => DEC_n(0x1D),      () => LD_nn_n(0x1E),    () => RRA(0x1F),
+                // 20 - 2F
+                () => JR_cc_n(0x20),    () => LD_n_nn(0x21),    () => LDI_HLm_A(0x22),  () => INC_nn(0x23),
+                () => INC_n(0x24),      () => DEC_n(0x25),      () => LD_nn_n(0x26),    () => DAA(0x27),
+                () => JR_cc_n(0x28),    () => ADD_HL_n(0x29),   () => LDI_A_HLm(0x2A),  () => DEC_nn(0x2B),
+                () => INC_n(0x2C),      () => DEC_n(0x2D),      () => LD_nn_n(0x2E),    () => CPL(0x2F),
+                // 30 - 3F
+                () => JR_cc_n(0x30),    () => LD_n_nn(0x31),    () => LDD_HLm_A(0x32),  () => INC_nn(0x33),
+                () => INC_n(0x34),      () => DEC_n(0x35),      () => LD_r1_r2(0x36),   () => SCF(0x37),
+                () => JR_cc_n(0x38),    () => ADD_HL_n(0x39),   () => LDD_A_HLm(0x3A),  () => DEC_nn(0x3B),
+                () => INC_n(0x3C),      () => DEC_n(0x3D),      () => LD_A_n(0x3E),     () => CCF(0x3F),
+                // 40 - 4F
+                () => LD_r1_r2(0x40),   () => LD_r1_r2(0x41),   () => LD_r1_r2(0x42),   () => LD_r1_r2(0x43),
+                () => LD_r1_r2(0x44),   () => LD_r1_r2(0x45),   () => LD_r1_r2(0x46),   () => LD_n_A(0x47),
+                () => LD_r1_r2(0x48),   () => LD_r1_r2(0x49),   () => LD_r1_r2(0x4A),   () => LD_r1_r2(0x4B),
+                () => LD_r1_r2(0x4C),   () => LD_r1_r2(0x4D),   () => LD_r1_r2(0x4E),   () => LD_n_A(0x4F),
+                // 50 - 5F
+                () => LD_r1_r2(0x50),   () => LD_r1_r2(0x51),   () => LD_r1_r2(0x52),   () => LD_r1_r2(0x53),
+                () => LD_r1_r2(0x54),   () => LD_r1_r2(0x55),   () => LD_r1_r2(0x56),   () => LD_n_A(0x57),
+                () => LD_r1_r2(0x58),   () => LD_r1_r2(0x59),   () => LD_r1_r2(0x5A),   () => LD_r1_r2(0x5B),
+                () => LD_r1_r2(0x5C),   () => LD_r1_r2(0x5D),   () => LD_r1_r2(0x5E),   () => LD_n_A(0x5F),
+                // 60 - 6F
+                () => LD_r1_r2(0x60),   () => LD_r1_r2(0x61),   () => LD_r1_r2(0x62),   () => LD_r1_r2(0x63),
+                () => LD_r1_r2(0x64),   () => LD_r1_r2(0x65),   () => LD_r1_r2(0x66),   () => LD_n_A(0x67),
+                () => LD_r1_r2(0x68),   () => LD_r1_r2(0x69),   () => LD_r1_r2(0x6A),   () => LD_r1_r2(0x6B),
+                () => LD_r1_r2(0x6C),   () => LD_r1_r2(0x6D),   () => LD_r1_r2(0x6E),   () => LD_n_A(0x6F),
+                // 70 - 7F
+                () => LD_r1_r2(0x70),   () => LD_r1_r2(0x71),   () => LD_r1_r2(0x72),   () => LD_r1_r2(0x73),
+                () => LD_r1_r2(0x74),   () => LD_r1_r2(0x75),   () => HALT(0x76),       () => LD_n_A(0x77),
+                () => LD_A_n(0x78),     () => LD_A_n(0x79),     () => LD_A_n(0x7A),     () => LD_A_n(0x7B),
+                () => LD_A_n(0x7C),     () => LD_A_n(0x7D),     () => LD_A_n(0x7E),     () => LD_n_A(0x7F),
+                // 80 - 8F
+                () => ADD_A_n(0x80),    () => ADD_A_n(0x81),    () => ADD_A_n(0x82),    () => ADD_A_n(0x83),
+                () => ADD_A_n(0x84),    () => ADD_A_n(0x85),    () => ADD_A_n(0x86),    () => ADD_A_n(0x87),
+                () => ADC_A_n(0x88),    () => ADC_A_n(0x89),    () => ADC_A_n(0x8A),    () => ADC_A_n(0x8B),
+                () => ADC_A_n(0x8C),    () => ADC_A_n(0x8D),    () => ADC_A_n(0x8E),    () => ADC_A_n(0x8F),
+                // 90 - 9F
+                () => SUB_A_n(0x90),    () => SUB_A_n(0x91),    () => SUB_A_n(0x92),    () => SUB_A_n(0x93),
+                () => SUB_A_n(0x94),    () => SUB_A_n(0x95),    () => SUB_A_n(0x96),    () => SUB_A_n(0x97),
+                () => SBC_A_n(0x98),    () => SBC_A_n(0x99),    () => SBC_A_n(0x9A),    () => SBC_A_n(0x9B),
+                () => SBC_A_n(0x9C),    () => SBC_A_n(0x9D),    () => SBC_A_n(0x9E),    () => SBC_A_n(0x9F),
+                // A0 - AF
+                () => AND_n(0xA0),      () => AND_n(0xA1),      () => AND_n(0xA2),      () => AND_n(0xA3),
+                () => AND_n(0xA4),      () => AND_n(0xA5),      () => AND_n(0xA6),      () => AND_n(0xA7),
+                () => XOR_n(0xA8),      () => XOR_n(0xA9),      () => XOR_n(0xAA),      () => XOR_n(0xAB),
+                () => XOR_n(0xAC),      () => XOR_n(0xAD),      () => XOR_n(0xAE),      () => XOR_n(0xAF),
+                // B0 - BF
+                () => OR_n(0xB0),       () => OR_n(0xB1),       () => OR_n(0xB2),       () => OR_n(0xB3),
+                () => OR_n(0xB4),       () => OR_n(0xB5),       () => OR_n(0xB6),       () => OR_n(0xB7),
+                () => CP_n(0xB8),       () => CP_n(0xB9),       () => CP_n(0xBA),       () => CP_n(0xBB),
+                () => CP_n(0xBC),       () => CP_n(0xBD),       () => CP_n(0xBE),       () => CP_n(0xBF),
+                // C0 - CF
+                () => RET_cc(0xC0),     () => POP_nn(0xC1),     () => JP_cc_nn(0xC2),   () => JP_nn(0xC3),
+                () => CALL_cc_nn(0xC4), () => PUSH_nn(0xC5),    () => ADD_A_n(0xC6),    () => RST_n(0xC7),
+                () => RET_cc(0xC8),     () => RET(0xC9),        () => JP_cc_nn(0xCA),   () => CB(0xCB),
+                () => CALL_cc_nn(0xCC), () => CALL_nn(0xCD),    () => ADC_A_n(0xCE),    () => RST_n(0xCF),
+                // D0 - DF
+                () => RET_cc(0xD0),     () => POP_nn(0xD1),     () => JP_cc_nn(0xD2),   null,
+                () => CALL_cc_nn(0xD4), () => PUSH_nn(0xD5),    () => SUB_A_n(0xD6),    () => RST_n(0xD7),
+                () => RET_cc(0xD8),     () => RETI(0xD9),       () => JP_cc_nn(0xDA),   null,
+                () => CALL_cc_nn(0xDC), null,                   () => SBC_A_n(0xDE),    () => RST_n(0xDF),
+                // E0 - EF
+                () => LDH_nm_A(0xE0),   () => POP_nn(0xE1),     () => LD_Cm_A(0xE2),    null,
+                null,                   () => PUSH_nn(0xE5),    () => AND_n(0xE6),      () => RST_n(0xE7),
+                () => ADD_SP_n(0xE8),   () => JP_HLm(0xE9),     () => LD_n_A(0xEA),     null,
+                null,                   null,                   () => XOR_n(0xEE),      () => RST_n(0xEF),
+                // F0 - FF
+                () => LDH_A_nm(0xF0),   () => POP_nn(0xF1),     () => LD_A_Cm(0xF2),    () => DI(0xF3),
+                null,                   () => PUSH_nn(0xF5),    () => OR_n(0xF6),       () => RST_n(0xF7),
+                () => LDHL_SP_n(0xF8),  () => LD_SP_HL(0xF9),   () => LD_A_n(0xFA),     () => EI(0xFB),
+                null,                   null,                   () => CP_n(0xFE),       () => RST_n(0xFF),
 
-                //10 - 1F
-                null,
-                () => LD_n_nn(0x11),     //LD DE,d16
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                () => LD_r16m(0x1A),     //LD A,(DE)
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //20 - 2F
-                () => JR_CC_r8(0x20),   //JR NZ,r8
-                () => LD_n_nn(0x21),     //LD HL,d16
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //30 - 3F
-                null,
-                () => LD_n_nn(0x31),     //LD SP,d16
-                () => LDD_r8(0x32),    //LD (HL-),A
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                () => LD_nn_n(0x3E),      //LD A,d8
-                null,
-
-                //40 - 4F
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //50 - 5F
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //60 - 6F
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //70 - 7F
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                () => LDr_r8(0x77),       //LD (HL),A
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //80 - 8F
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //90 - 9F
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //A0 - AF
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                () => XOR_r8(0xAF),     //XOR A
-
-                //B0 - BF
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //C0 - CF
-                null,
-                null,
-                null,
-                null,
-                () => CALL_CC_d16m(0xC4),   //CALL NZ,a16
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                () => CB(0xCB),             //CB
-                null,
-                () => CALL_d16m(0xCD),      //CALL a16
-                null,
-                null,
-
-                //D0 - DF
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //E0 - EF
-                () => LDH_d8m(0xE0),       //LDH (a8),a
-                null,
-                () => LDr_r8(0xE2),       //LD (C),A
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-
-                //F0 - FF
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
-                null,
             };
             CbMap = new List<Action>
             {
-                //00 - 0F
-                null, null, null, null, null, RLC_HLm, null, null, null, null, null, null, null, null, null, null,
-                //10 - 1F
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //20 - 2F
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //30 - 3F
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //40 - 4F
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //50 - 5F
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //60 - 6F
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //70 - 7F
-                null, null, null, null, null, null, null, null, null, null, null, null, BIT7_H, null, null, null,
-                //80 - 8F
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //90 - 9F
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //A0 - AF
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //B0 - BF
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //C0 - CF
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //D0 - DF
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //E0 - EF
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null,
-                //F0 - FF
-                null, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null
+                // 00 - 0F
+                () => RLC_n(0x00), () => RLC_n(0x01), () => RLC_n(0x02), () => RLC_n(0x03),
+                () => RLC_n(0x04), () => RLC_n(0x05), () => RLC_n(0x06), () => RLC_n(0x07),
+                () => RRC_n(0x08), () => RRC_n(0x09), () => RRC_n(0x0A), () => RRC_n(0x0B),
+                () => RRC_n(0x0C), () => RRC_n(0x0D), () => RRC_n(0x0E), () => RRC_n(0x0F),
+                // 10 - 1F
+                () => RL_n(0x10), () => RL_n(0x11), () => RL_n(0x12), () => RL_n(0x13),
+                () => RL_n(0x14), () => RL_n(0x15), () => RL_n(0x16), () => RL_n(0x17),
+                () => RR_n(0x18), () => RR_n(0x19), () => RR_n(0x1A), () => RR_n(0x1B),
+                () => RR_n(0x1C), () => RR_n(0x1D), () => RR_n(0x1E), () => RR_n(0x1F),
+                // 20 - 2F
+                () => SLA_n(0x20), () => SLA_n(0x21), () => SLA_n(0x22), () => SLA_n(0x23),
+                () => SLA_n(0x24), () => SLA_n(0x25), () => SLA_n(0x26), () => SLA_n(0x27),
+                () => SRA_n(0x28), () => SRA_n(0x29), () => SRA_n(0x2A), () => SRA_n(0x2B),
+                () => SRA_n(0x2C), () => SRA_n(0x2D), () => SRA_n(0x2E), () => SRA_n(0x2F),
+                // 30 - 3F
+                () => SWAP_n(0x30), () => SWAP_n(0x31), () => SWAP_n(0x32), () => SWAP_n(0x33),
+                () => SWAP_n(0x34), () => SWAP_n(0x35), () => SWAP_n(0x36), () => SWAP_n(0x37),
+                () => SRL_n(0x38), () => SRL_n(0x39), () => SRL_n(0x3A), () => SRL_n(0x3B),
+                () => SRL_n(0x3C), () => SRL_n(0x3D), () => SRL_n(0x3E), () => SRL_n(0x3F),
+                // 40 - 4F
+                () => BIT(0x40), () => BIT(0x41), () => BIT(0x42), () => BIT(0x43),
+                () => BIT(0x44), () => BIT(0x45), () => BIT(0x46), () => BIT(0x47),
+                () => BIT(0x48), () => BIT(0x49), () => BIT(0x4A), () => BIT(0x4B),
+                () => BIT(0x4C), () => BIT(0x4D), () => BIT(0x4E), () => BIT(0x4F),
+                // 50 - 5F
+                () => BIT(0x50), () => BIT(0x51), () => BIT(0x52), () => BIT(0x53),
+                () => BIT(0x54), () => BIT(0x55), () => BIT(0x56), () => BIT(0x57),
+                () => BIT(0x58), () => BIT(0x59), () => BIT(0x5A), () => BIT(0x5B),
+                () => BIT(0x5C), () => BIT(0x5D), () => BIT(0x5E), () => BIT(0x5F),
+                // 60 - 6F
+                () => BIT(0x60), () => BIT(0x61), () => BIT(0x62), () => BIT(0x63),
+                () => BIT(0x64), () => BIT(0x65), () => BIT(0x66), () => BIT(0x67),
+                () => BIT(0x68), () => BIT(0x69), () => BIT(0x6A), () => BIT(0x6B),
+                () => BIT(0x6C), () => BIT(0x6D), () => BIT(0x6E), () => BIT(0x6F),
+                // 70 - 7F
+                () => BIT(0x70), () => BIT(0x71), () => BIT(0x72), () => BIT(0x73),
+                () => BIT(0x74), () => BIT(0x75), () => BIT(0x76), () => BIT(0x77),
+                () => BIT(0x78), () => BIT(0x79), () => BIT(0x7A), () => BIT(0x7B),
+                () => BIT(0x7C), () => BIT(0x7D), () => BIT(0x7E), () => BIT(0x7F),
+                // 80 - 8F
+                () => RES(0x80), () => RES(0x81), () => RES(0x82), () => RES(0x83),
+                () => RES(0x84), () => RES(0x85), () => RES(0x86), () => RES(0x87),
+                () => RES(0x88), () => RES(0x89), () => RES(0x8A), () => RES(0x8B),
+                () => RES(0x8C), () => RES(0x8D), () => RES(0x8E), () => RES(0x8F),
+                // 90 - 9F
+                () => RES(0x90), () => RES(0x91), () => RES(0x92), () => RES(0x93),
+                () => RES(0x94), () => RES(0x95), () => RES(0x96), () => RES(0x97),
+                () => RES(0x98), () => RES(0x99), () => RES(0x9A), () => RES(0x9B),
+                () => RES(0x9C), () => RES(0x9D), () => RES(0x9E), () => RES(0x9F),
+                // A0 - AF
+                () => RES(0xA0), () => RES(0xA1), () => RES(0xA2), () => RES(0xA3),
+                () => RES(0xA4), () => RES(0xA5), () => RES(0xA6), () => RES(0xA7),
+                () => RES(0xA8), () => RES(0xA9), () => RES(0xAA), () => RES(0xAB),
+                () => RES(0xAC), () => RES(0xAD), () => RES(0xAE), () => RES(0xAF),
+                // B0 - BF
+                () => RES(0xB0), () => RES(0xB1), () => RES(0xB2), () => RES(0xB3),
+                () => RES(0xB4), () => RES(0xB5), () => RES(0xB6), () => RES(0xB7),
+                () => RES(0xB8), () => RES(0xB9), () => RES(0xBA), () => RES(0xBB),
+                () => RES(0xBC), () => RES(0xBD), () => RES(0xBE), () => RES(0xBF),
+                // C0 - CF
+                () => SET(0xC0), () => SET(0xC1), () => SET(0xC2), () => SET(0xC3),
+                () => SET(0xC4), () => SET(0xC5), () => SET(0xC6), () => SET(0xC7),
+                () => SET(0xC8), () => SET(0xC9), () => SET(0xCA), () => SET(0xCB),
+                () => SET(0xCC), () => SET(0xCD), () => SET(0xCE), () => SET(0xCF),
+                // D0 - DF
+                () => SET(0xD0), () => SET(0xD1), () => SET(0xD2), () => SET(0xD3),
+                () => SET(0xD4), () => SET(0xD5), () => SET(0xD6), () => SET(0xD7),
+                () => SET(0xD8), () => SET(0xD9), () => SET(0xDA), () => SET(0xDB),
+                () => SET(0xDC), () => SET(0xDD), () => SET(0xDE), () => SET(0xDF),
+                // E0 - EF
+                () => SET(0xE0), () => SET(0xE1), () => SET(0xE2), () => SET(0xE3),
+                () => SET(0xE4), () => SET(0xE5), () => SET(0xE6), () => SET(0xE7),
+                () => SET(0xE8), () => SET(0xE9), () => SET(0xEA), () => SET(0xEB),
+                () => SET(0xEC), () => SET(0xED), () => SET(0xEE), () => SET(0xEF),
+                // F0 - FF
+                () => SET(0xF0), () => SET(0xF1), () => SET(0xF2), () => SET(0xF3),
+                () => SET(0xF4), () => SET(0xF5), () => SET(0xF6), () => SET(0xF7),
+                () => SET(0xF8), () => SET(0xF9), () => SET(0xFA), () => SET(0xFB),
+                () => SET(0xFC), () => SET(0xFD), () => SET(0xFE), () => SET(0xFF),
             };
         }
 
@@ -2281,7 +2134,9 @@ namespace Sandbox.Core
         //
         // - Flags affected -
         // Z - Set if result is zero.
-        // N - Reset.7 = GetBit7(Reg_A);ycles
+        // N - Reset.
+        // H - Reset.
+        // C - Reset.
         // SWAP         A           CB 37   8
         // SWAP         B           CB 30   8
         // SWAP         C           CB 31   8
@@ -2543,7 +2398,7 @@ namespace Sandbox.Core
         //
         // - Opcodes -
         // Instruction  Parameters  Opcode  Cycles
-        // EI           -/-         F3      4
+        // EI           -/-         FB      4
         private void EI(byte opcode)
         {
             lastOpCycles = 4;
@@ -2575,7 +2430,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x07:
-                    bit7 = GetBit7(Reg_A);
+                    bit7 = GetBit(7, Reg_A);
 
                     result = (byte)(Reg_A << 1);
                     result = (byte)(result | (bit7 ? 1 : 0));
@@ -2614,7 +2469,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x17:
-                    bit7 = GetBit7(Reg_A);
+                    bit7 = GetBit(7, Reg_A);
 
                     result = (byte)(Reg_A << 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -2653,7 +2508,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x0F:
-                    bit0 = GetBit0(Reg_A);
+                    bit0 = GetBit(0, Reg_A);
 
                     result = (byte)(Reg_A >> 1);
                     result = (byte)(result | (bit0 ? 1 : 0));
@@ -2692,7 +2547,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x0F:
-                    bit0 = GetBit0(Reg_A);
+                    bit0 = GetBit(0, Reg_A);
 
                     result = (byte)(Reg_A >> 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -2741,7 +2596,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x07:
-                    bit7 = GetBit7(Reg_A);
+                    bit7 = GetBit(7, Reg_A);
 
                     result = (byte)(Reg_A << 1);
                     result = (byte)(result | (bit7 ? 1 : 0));
@@ -2750,7 +2605,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x00:
-                    bit7 = GetBit7(Reg_B);
+                    bit7 = GetBit(7, Reg_B);
 
                     result = (byte)(Reg_B << 1);
                     result = (byte)(result | (bit7 ? 1 : 0));
@@ -2759,7 +2614,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x01:
-                    bit7 = GetBit7(Reg_C);
+                    bit7 = GetBit(7, Reg_C);
 
                     result = (byte)(Reg_C << 1);
                     result = (byte)(result | (bit7 ? 1 : 0));
@@ -2768,7 +2623,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x02:
-                    bit7 = GetBit7(Reg_D);
+                    bit7 = GetBit(7, Reg_D);
 
                     result = (byte)(Reg_D << 1);
                     result = (byte)(result | (bit7 ? 1 : 0));
@@ -2777,7 +2632,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x03:
-                    bit7 = GetBit7(Reg_E);
+                    bit7 = GetBit(7, Reg_E);
 
                     result = (byte)(Reg_E << 1);
                     result = (byte)(result | (bit7 ? 1 : 0));
@@ -2786,7 +2641,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x04:
-                    bit7 = GetBit7(Reg_H);
+                    bit7 = GetBit(7, Reg_H);
 
                     result = (byte)(Reg_H << 1);
                     result = (byte)(result | (bit7 ? 1 : 0));
@@ -2795,7 +2650,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x05:
-                    bit7 = GetBit7(Reg_L);
+                    bit7 = GetBit(7, Reg_L);
 
                     result = (byte)(Reg_L << 1);
                     result = (byte)(result | (bit7 ? 1 : 0));
@@ -2805,7 +2660,7 @@ namespace Sandbox.Core
                     break;
                 case 0x06:
                     result = mmu.ReadByte(Reg_HL);
-                    bit7 = GetBit7(result);
+                    bit7 = GetBit(7, result);
 
                     result = (byte)(result << 1);
                     result = (byte)(result | (bit7 ? 1 : 0));
@@ -2847,14 +2702,14 @@ namespace Sandbox.Core
         // RL           H           CB 14   8
         // RL           L           CB 15   8
         // RL           (HL)        CB 16   16
-        private void Rl_n(byte opcode)
+        private void RL_n(byte opcode)
         {
             bool bit7;
             byte result;
             switch (opcode)
             {
                 case 0x17:
-                    bit7 = GetBit7(Reg_A);
+                    bit7 = GetBit(7, Reg_A);
 
                     result = (byte)(Reg_A << 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -2863,7 +2718,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x10:
-                    bit7 = GetBit7(Reg_B);
+                    bit7 = GetBit(7, Reg_B);
 
                     result = (byte)(Reg_B << 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -2872,7 +2727,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x11:
-                    bit7 = GetBit7(Reg_C);
+                    bit7 = GetBit(7, Reg_C);
 
                     result = (byte)(Reg_C << 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -2881,7 +2736,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x12:
-                    bit7 = GetBit7(Reg_D);
+                    bit7 = GetBit(7, Reg_D);
 
                     result = (byte)(Reg_D << 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -2890,7 +2745,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x13:
-                    bit7 = GetBit7(Reg_E);
+                    bit7 = GetBit(7, Reg_E);
 
                     result = (byte)(Reg_E << 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -2899,7 +2754,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x14:
-                    bit7 = GetBit7(Reg_H);
+                    bit7 = GetBit(7, Reg_H);
 
                     result = (byte)(Reg_H << 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -2908,7 +2763,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x15:
-                    bit7 = GetBit7(Reg_L);
+                    bit7 = GetBit(7, Reg_L);
 
                     result = (byte)(Reg_L << 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -2918,7 +2773,7 @@ namespace Sandbox.Core
                     break;
                 case 0x16:
                     result = mmu.ReadByte(Reg_HL);
-                    bit7 = GetBit7(result);
+                    bit7 = GetBit(7, result);
 
                     result = (byte)(result << 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -2967,7 +2822,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x0F:
-                    bit0 = GetBit0(Reg_A);
+                    bit0 = GetBit(0, Reg_A);
 
                     result = (byte)(Reg_A >> 1);
                     result = (byte)(result | (bit0 ? 1 : 0));
@@ -2976,7 +2831,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x08:
-                    bit0 = GetBit0(Reg_B);
+                    bit0 = GetBit(0, Reg_B);
 
                     result = (byte)(Reg_B >> 1);
                     result = (byte)(result | (bit0 ? 1 : 0));
@@ -2985,7 +2840,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x09:
-                    bit0 = GetBit0(Reg_C);
+                    bit0 = GetBit(0, Reg_C);
 
                     result = (byte)(Reg_C >> 1);
                     result = (byte)(result | (bit0 ? 1 : 0));
@@ -2994,7 +2849,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x0A:
-                    bit0 = GetBit0(Reg_D);
+                    bit0 = GetBit(0, Reg_D);
 
                     result = (byte)(Reg_D >> 1);
                     result = (byte)(result | (bit0 ? 1 : 0));
@@ -3003,7 +2858,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x0B:
-                    bit0 = GetBit0(Reg_E);
+                    bit0 = GetBit(0, Reg_E);
 
                     result = (byte)(Reg_E >> 1);
                     result = (byte)(result | (bit0 ? 1 : 0));
@@ -3012,7 +2867,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x0C:
-                    bit0 = GetBit0(Reg_H);
+                    bit0 = GetBit(0, Reg_H);
 
                     result = (byte)(Reg_H >> 1);
                     result = (byte)(result | (bit0 ? 1 : 0));
@@ -3021,7 +2876,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x0D:
-                    bit0 = GetBit0(Reg_L);
+                    bit0 = GetBit(0, Reg_L);
 
                     result = (byte)(Reg_L >> 1);
                     result = (byte)(result | (bit0 ? 1 : 0));
@@ -3031,7 +2886,7 @@ namespace Sandbox.Core
                     break;
                 case 0x0E:
                     result = mmu.ReadByte(Reg_HL);
-                    bit0 = GetBit0(result);
+                    bit0 = GetBit(0, result);
 
                     result = (byte)(result >> 1);
                     result = (byte)(result | (bit0 ? 1 : 0));
@@ -3080,7 +2935,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x0F:
-                    bit0 = GetBit0(Reg_A);
+                    bit0 = GetBit(0, Reg_A);
 
                     result = (byte)(Reg_A >> 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -3089,7 +2944,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x08:
-                    bit0 = GetBit0(Reg_B);
+                    bit0 = GetBit(0, Reg_B);
 
                     result = (byte)(Reg_B >> 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -3098,7 +2953,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x09:
-                    bit0 = GetBit0(Reg_C);
+                    bit0 = GetBit(0, Reg_C);
 
                     result = (byte)(Reg_C >> 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -3107,7 +2962,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x0A:
-                    bit0 = GetBit0(Reg_D);
+                    bit0 = GetBit(0, Reg_D);
 
                     result = (byte)(Reg_D >> 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -3116,7 +2971,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x0B:
-                    bit0 = GetBit0(Reg_E);
+                    bit0 = GetBit(0, Reg_E);
 
                     result = (byte)(Reg_E >> 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -3125,7 +2980,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x0C:
-                    bit0 = GetBit0(Reg_H);
+                    bit0 = GetBit(0, Reg_H);
 
                     result = (byte)(Reg_H >> 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -3134,7 +2989,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x0D:
-                    bit0 = GetBit0(Reg_L);
+                    bit0 = GetBit(0, Reg_L);
 
                     result = (byte)(Reg_L >> 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -3144,7 +2999,7 @@ namespace Sandbox.Core
                     break;
                 case 0x0E:
                     result = mmu.ReadByte(Reg_HL);
-                    bit0 = GetBit0(result);
+                    bit0 = GetBit(0, result);
 
                     result = (byte)(result >> 1);
                     result = (byte)(result | (GetCarryFlag() ? 1 : 0));
@@ -3193,7 +3048,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x27:
-                    bit7 = GetBit7(Reg_A);
+                    bit7 = GetBit(7, Reg_A);
 
                     result = (byte)(Reg_A << 1);
                     Reg_A = result;
@@ -3201,7 +3056,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x20:
-                    bit7 = GetBit7(Reg_B);
+                    bit7 = GetBit(7, Reg_B);
 
                     result = (byte)(Reg_B << 1);
                     Reg_B = result;
@@ -3209,7 +3064,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x21:
-                    bit7 = GetBit7(Reg_C);
+                    bit7 = GetBit(7, Reg_C);
 
                     result = (byte)(Reg_C << 1);
                     Reg_C = result;
@@ -3217,7 +3072,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x22:
-                    bit7 = GetBit7(Reg_D);
+                    bit7 = GetBit(7, Reg_D);
 
                     result = (byte)(Reg_D << 1);
                     Reg_D = result;
@@ -3225,7 +3080,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x23:
-                    bit7 = GetBit7(Reg_E);
+                    bit7 = GetBit(7, Reg_E);
 
                     result = (byte)(Reg_E << 1);
                     Reg_E = result;
@@ -3233,7 +3088,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x24:
-                    bit7 = GetBit7(Reg_H);
+                    bit7 = GetBit(7, Reg_H);
 
                     result = (byte)(Reg_H << 1);
                     Reg_H = result;
@@ -3241,7 +3096,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x25:
-                    bit7 = GetBit7(Reg_L);
+                    bit7 = GetBit(7, Reg_L);
 
                     result = (byte)(Reg_L << 1);
                     Reg_L = result;
@@ -3250,7 +3105,7 @@ namespace Sandbox.Core
                     break;
                 case 0x26:
                     result = mmu.ReadByte(Reg_HL);
-                    bit7 = GetBit7(result);
+                    bit7 = GetBit(7, result);
 
                     result = (byte)(result << 1);
                     mmu.WriteByte(Reg_HL, result);
@@ -3298,7 +3153,7 @@ namespace Sandbox.Core
             switch (opcode)
             {
                 case 0x2F:
-                    bit0 = GetBit0(Reg_A);
+                    bit0 = GetBit(0, Reg_A);
 
                     result = (byte)(Reg_A >> 1);
                     Reg_A = result;
@@ -3306,7 +3161,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x28:
-                    bit0 = GetBit0(Reg_B);
+                    bit0 = GetBit(0, Reg_B);
 
                     result = (byte)(Reg_B >> 1);
                     Reg_B = result;
@@ -3314,7 +3169,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x29:
-                    bit0 = GetBit0(Reg_C);
+                    bit0 = GetBit(0, Reg_C);
 
                     result = (byte)(Reg_C >> 1);
                     Reg_C = result;
@@ -3322,7 +3177,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x2A:
-                    bit0 = GetBit0(Reg_D);
+                    bit0 = GetBit(0, Reg_D);
 
                     result = (byte)(Reg_D >> 1);
                     Reg_D = result;
@@ -3330,7 +3185,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x2B:
-                    bit0 = GetBit0(Reg_E);
+                    bit0 = GetBit(0, Reg_E);
 
                     result = (byte)(Reg_E >> 1);
                     Reg_E = result;
@@ -3338,7 +3193,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x2C:
-                    bit0 = GetBit0(Reg_H);
+                    bit0 = GetBit(0, Reg_H);
 
                     result = (byte)(Reg_H >> 1);
                     Reg_H = result;
@@ -3346,7 +3201,7 @@ namespace Sandbox.Core
                     lastOpCycles = 8;
                     break;
                 case 0x2D:
-                    bit0 = GetBit0(Reg_L);
+                    bit0 = GetBit(0, Reg_L);
 
                     result = (byte)(Reg_L >> 1);
                     Reg_L = result;
@@ -3355,7 +3210,7 @@ namespace Sandbox.Core
                     break;
                 case 0x2E:
                     result = mmu.ReadByte(Reg_HL);
-                    bit0 = GetBit0(result);
+                    bit0 = GetBit(0, result);
 
                     result = (byte)(result >> 1);
                     mmu.WriteByte(Reg_HL, result);
@@ -3372,90 +3227,438 @@ namespace Sandbox.Core
             AffectCarryFlag(bit0);
         }
 
+        // 11. SRL n (p.107)
+        //
+        // - Description -
+        // Shift n right into Carry. MSB set to 0.
+        //
+        // - Use with -
+        // n = A,B,C,D,E,H,L,(HL)
+        //
+        // - Flags affected -
+        // Z - Set if result is zero.
+        // N - Reset.
+        // H - Reset.
+        // C - Contains old bit 0 data.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // SRA           A           CB 3F   8
+        // SRA           B           CB 38   8
+        // SRA           C           CB 39   8
+        // SRA           D           CB 3A   8
+        // SRA           E           CB 3B   8
+        // SRA           H           CB 3C   8
+        // SRA           L           CB 3D   8
+        // SRA           (HL)        CB 3E   16
+        private void SRL_n(byte opcode)
+        {
+            bool bit0;
+            byte result;
+            switch (opcode)
+            {
+                case 0x3F:
+                    bit0 = GetBit(0, Reg_A);
+
+                    result = (byte)(Reg_A >> 1);
+                    result = AffectBit(7, result, false);
+                    Reg_A = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x38:
+                    bit0 = GetBit(0, Reg_B);
+
+                    result = (byte)(Reg_B >> 1);
+                    result = AffectBit(7, result, false);
+                    Reg_B = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x39:
+                    bit0 = GetBit(0, Reg_C);
+
+                    result = (byte)(Reg_C >> 1);
+                    result = AffectBit(7, result, false);
+                    Reg_C = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x3A:
+                    bit0 = GetBit(0, Reg_D);
+
+                    result = (byte)(Reg_D >> 1);
+                    result = AffectBit(7, result, false);
+                    Reg_D = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x3B:
+                    bit0 = GetBit(0, Reg_E);
+
+                    result = (byte)(Reg_E >> 1);
+                    result = AffectBit(7, result, false);
+                    Reg_E = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x3C:
+                    bit0 = GetBit(0, Reg_H);
+
+                    result = (byte)(Reg_H >> 1);
+                    result = AffectBit(7, result, false);
+                    Reg_H = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x3D:
+                    bit0 = GetBit(0, Reg_L);
+
+                    result = (byte)(Reg_L >> 1);
+                    result = AffectBit(7, result, false);
+                    Reg_L = result;
+
+                    lastOpCycles = 8;
+                    break;
+                case 0x3E:
+                    bit0 = GetBit(0, mmu.ReadByte(Reg_HL));
+
+                    result = mmu.ReadByte(Reg_HL);
+                    result = (byte)(result >> 1);
+                    result = AffectBit(7, result, false);
+                    mmu.WriteByte(Reg_HL, result);
+
+                    lastOpCycles = 16;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            AffectZeroFlag(result == 0);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(false);
+            AffectCarryFlag(bit0);
+        }
+
         #endregion
 
-        //Load into register1 from memory address stored in register2 (DP, 65)
-        private void LD_r16m(byte opcode)
+        #region Bit Opcodes
+
+        // 1. BIT b,r (p.108)
+        //
+        // - Description -
+        // Test bit b in register r.
+        //
+        // - Use with -
+        // b = 0 - 7, r = A, B, C, D, E, H, L, (HL)
+        //
+        // - Flags affected -
+        // Z - Set if bit b of register r is 0.
+        // N - Reset.
+        // H - Set.
+        // C - Not affected.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode          Cycles
+        // BIT          b, A        CB [4-7][7/F]   8
+        // BIT          b, B        CB [4-7][0/8]   8
+        // BIT          b, C        CB [4-7][1/9]   8
+        // BIT          b, D        CB [4-7][2/A]   8
+        // BIT          b, E        CB [4-7][3/B]   8
+        // BIT          b, H        CB [4-7][4/C]   8
+        // BIT          b, L        CB [4-7][5/D]   8
+        // BIT          b, (HL)     CB [4-7][6/E]   16
+        private void BIT(byte opcode)
         {
-            switch (opcode)
+            // Break opcode into most significant and least significant nybbles
+            byte msn = (byte)((opcode >> 4) & 0xF);
+            byte lsn = (byte)(opcode & 0xF);
+
+            int bit;
+            byte register;
+            
+            switch (msn)
             {
-                case 0x0A:
-                    Reg_A = mmu.ReadByte(Reg_BC);
+                case 0x04:
+                    bit = (lsn < 0x08) ? 0 : 1;
                     break;
-                case 0x1A:
-                    Reg_A = mmu.ReadByte(Reg_DE);
+                case 0x05:
+                    bit = (lsn < 0x08) ? 2 : 3;
+                    break;
+                case 0x06:
+                    bit = (lsn < 0x08) ? 4 : 5;
+                    break;
+                case 0x07:
+                    bit = (lsn < 0x08) ? 6 : 7;
                     break;
                 default:
-                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+                    throw new ApplicationException($"OpCode called vas not a valid BIT operation! ({opcode})");
             }
 
-            lastOpCycles = 8;
-            return;
+            switch (lsn)
+            {
+                case 0x0:
+                case 0x8:
+                    register = Reg_B;
+                    lastOpCycles = 8;
+                    break;
+                case 0x1:
+                case 0x9:
+                    register = Reg_C;
+                    lastOpCycles = 8;
+                    break;
+                case 0x2:
+                case 0xA:
+                    register = Reg_D;
+                    lastOpCycles = 8;
+                    break;
+                case 0x3:
+                case 0xB:
+                    register = Reg_E;
+                    lastOpCycles = 8;
+                    break;
+                case 0x4:
+                case 0xC:
+                    register = Reg_H;
+                    lastOpCycles = 8;
+                    break;
+                case 0x5:
+                case 0xD:
+                    register = Reg_L;
+                    lastOpCycles = 8;
+                    break;
+                case 0x6:
+                case 0xE:
+                    register = mmu.ReadByte(Reg_HL);
+                    lastOpCycles = 16;
+                    break;
+                case 0x7:
+                case 0xF:
+                    register = Reg_A;
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new ApplicationException($"OpCode called vas not a valid BIT operation! ({opcode})");
+            }
+
+            bool result = GetBit(bit, register);
+
+            AffectZeroFlag(!result);
+            AffectSubFlag(false);
+            AffectHalfCarryFlag(true);
         }
 
-        //Load value into memory address given by next word in memory
-        private void LDm_r16(byte opcode)
+        // 2. SET b,r (p.109)
+        //
+        // - Description -
+        // Set bit b in register r.
+        //
+        // - Use with -
+        // b = 0 - 7, r = A, B, C, D, E, H, L, (HL)
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode          Cycles
+        // SET          b, A        CB [C-F][7/F]   8
+        // SET          b, B        CB [C-F][0/8]   8
+        // SET          b, C        CB [C-F][1/9]   8
+        // SET          b, D        CB [C-F][2/A]   8
+        // SET          b, E        CB [C-F][3/B]   8
+        // SET          b, H        CB [C-F][4/C]   8
+        // SET          b, L        CB [C-F][5/D]   8
+        // SET          b, (HL)     CB [C-F][6/E]   16
+        private void SET(byte opcode)
         {
-            switch (opcode)
+            // Break opcode into most significant and least significant nybbles
+            byte msn = (byte)((opcode >> 4) & 0xF);
+            byte lsn = (byte)(opcode & 0xF);
+
+            int bit;
+            byte register;
+
+            switch (msn)
+            {
+                case 0x0C:
+                    bit = (lsn < 0x08) ? 0 : 1;
+                    break;
+                case 0x0D:
+                    bit = (lsn < 0x08) ? 2 : 3;
+                    break;
+                case 0x0E:
+                    bit = (lsn < 0x08) ? 4 : 5;
+                    break;
+                case 0x0F:
+                    bit = (lsn < 0x08) ? 6 : 7;
+                    break;
+                default:
+                    throw new ApplicationException($"OpCode called vas not a valid BIT operation! ({opcode})");
+            }
+
+            switch (lsn)
+            {
+                case 0x0:
+                case 0x8:
+                    register = Reg_B;
+                    lastOpCycles = 8;
+                    break;
+                case 0x1:
+                case 0x9:
+                    register = Reg_C;
+                    lastOpCycles = 8;
+                    break;
+                case 0x2:
+                case 0xA:
+                    register = Reg_D;
+                    lastOpCycles = 8;
+                    break;
+                case 0x3:
+                case 0xB:
+                    register = Reg_E;
+                    lastOpCycles = 8;
+                    break;
+                case 0x4:
+                case 0xC:
+                    register = Reg_H;
+                    lastOpCycles = 8;
+                    break;
+                case 0x5:
+                case 0xD:
+                    register = Reg_L;
+                    lastOpCycles = 8;
+                    break;
+                case 0x6:
+                case 0xE:
+                    register = mmu.ReadByte(Reg_HL);
+                    lastOpCycles = 16;
+                    break;
+                case 0x7:
+                case 0xF:
+                    register = Reg_A;
+                    lastOpCycles = 8;
+                    break;
+                default:
+                    throw new ApplicationException($"OpCode called vas not a valid BIT operation! ({opcode})");
+            }
+
+            AffectBit(bit, register, true);
+        }
+
+        // 3. RES b,r (p.110)
+        //
+        // - Description -
+        // Reset bit b in register r.
+        //
+        // - Use with -
+        // b = 0 - 7, r = A, B, C, D, E, H, L, (HL)
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode          Cycles
+        // RES          b, A        CB [8-B][7/F]   8
+        // RES          b, B        CB [8-B][0/8]   8
+        // RES          b, C        CB [8-B][1/9]   8
+        // RES          b, D        CB [8-B][2/A]   8
+        // RES          b, E        CB [8-B][3/B]   8
+        // RES          b, H        CB [8-B][4/C]   8
+        // RES          b, L        CB [8-B][5/D]   8
+        // RES          b, (HL)     CB [8-B][6/E]   16
+        private void RES(byte opcode)
+        {
+            // Break opcode into most significant and least significant nybbles
+            byte msn = (byte)((opcode >> 4) & 0xF);
+            byte lsn = (byte)(opcode & 0xF);
+
+            int bit;
+            byte register;
+
+            switch (msn)
             {
                 case 0x08:
-                    var addr = (ushort)(mmu.ReadWord(Reg_PC));
-                    Reg_PC += 2;
-                    mmu.WriteWord(addr, Reg_SP);
+                    bit = (lsn < 0x08) ? 0 : 1;
+                    break;
+                case 0x09:
+                    bit = (lsn < 0x08) ? 2 : 3;
+                    break;
+                case 0x0A:
+                    bit = (lsn < 0x08) ? 4 : 5;
+                    break;
+                case 0x0B:
+                    bit = (lsn < 0x08) ? 6 : 7;
                     break;
                 default:
-                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+                    throw new ApplicationException($"OpCode called vas not a valid BIT operation! ({opcode})");
             }
 
-            lastOpCycles = 20;
-        }
-
-        //Load value of register1 to register2 and decrement register2 (DP, 71)
-        private void LDD_r8(byte opcode)
-        {
-            switch (opcode)
+            switch (lsn)
             {
-                case 0x32:
-                    mmu.WriteByte(Reg_HL, Reg_A);
-                    Reg_HL--;
+                case 0x0:
+                case 0x8:
+                    register = Reg_B;
+                    lastOpCycles = 8;
+                    break;
+                case 0x1:
+                case 0x9:
+                    register = Reg_C;
+                    lastOpCycles = 8;
+                    break;
+                case 0x2:
+                case 0xA:
+                    register = Reg_D;
+                    lastOpCycles = 8;
+                    break;
+                case 0x3:
+                case 0xB:
+                    register = Reg_E;
+                    lastOpCycles = 8;
+                    break;
+                case 0x4:
+                case 0xC:
+                    register = Reg_H;
+                    lastOpCycles = 8;
+                    break;
+                case 0x5:
+                case 0xD:
+                    register = Reg_L;
+                    lastOpCycles = 8;
+                    break;
+                case 0x6:
+                case 0xE:
+                    register = mmu.ReadByte(Reg_HL);
+                    lastOpCycles = 16;
+                    break;
+                case 0x7:
+                case 0xF:
+                    register = Reg_A;
+                    lastOpCycles = 8;
                     break;
                 default:
-                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+                    throw new ApplicationException($"OpCode called vas not a valid BIT operation! ({opcode})");
             }
 
-            lastOpCycles = 8;
-            return;
+            AffectBit(bit, register, false);
         }
 
-        //Load register1 into memory address (0xFF00 + register2) (DP, 65)
-        private void LDr_r8(byte opcode)
+        #endregion
+
+        #region Jumps
+
+        // 1. JP nn (p.111)
+        //
+        // - Description -
+        // Jump to address nn.
+        //
+        // - Use with -
+        // nn = two byte immediate value. (LS byte first.)
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // JP           nn          C3      12
+        private void JP_nn(byte opcode)
         {
+            bool bit7;
+            byte result;
             switch (opcode)
             {
-                case 0x02:
-                    mmu.WriteByte(Reg_BC, Reg_A);
-                    break;
-                case 0x77:
-                    mmu.WriteByte(Reg_HL, Reg_A);
-                    break;
-                case 0xE2:
-                    mmu.WriteByte(Reg_C, Reg_A);
-                    break;
-                default:
-                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
-            }
-
-            lastOpCycles = 8;
-        }
-
-        //Load Reg_A into memory address 0xFF00 + (next byte in memory) (DP, 75)
-        private void LDH_d8m(byte opcode)
-        {
-            switch (opcode)
-            {
-                case 0xE0:
-                    var addr = (ushort)(0xFF00 + mmu.ReadByte(Reg_PC++));
-                    mmu.WriteByte(addr, Reg_A);
+                case 0xC3:
+                    Reg_PC = mmu.ReadWord(Reg_PC);
                     break;
                 default:
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
@@ -3464,268 +3667,447 @@ namespace Sandbox.Core
             lastOpCycles = 12;
         }
 
-        //8-bit ALU Increment (DP, 88)
-        private void INC(byte opcode)
+        // 2. JP cc,nn (p.111)
+        //
+        // - Description -
+        // Jump to address nn if following condition is true:
+        //   cc = NZ,   Jump if Z flag is reset.
+        //   cc = Z,    Jump if Z flag is set.
+        //   cc = NC,   Jump if C flag is reset.
+        //   cc = C,    Jump if C flag is set.
+        //
+        // - Use with -
+        // nn = two byte immediate value. (LS byte first.)
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // JP           NZ, nn      C2      12
+        // JP           Z, nn       CA      12
+        // JP           NC, nn      D2      12
+        // JP           C, nn       DA      12
+        private void JP_cc_nn(byte opcode)
         {
-            ushort val;
+            var allowJump = false;
+
             switch (opcode)
             {
-                case 0x04:
-                    val = Reg_B;
-                    Reg_B++;
+                case 0xC2:
+                    if (!GetZeroFlag())
+                        allowJump = true;
                     break;
-                case 0x0C:
-                    val = Reg_C;
-                    Reg_C++;
+                case 0xCA:
+                    if (!!GetZeroFlag())
+                        allowJump = true;
+                    break;
+                case 0xD2:
+                    if (!GetCarryFlag())
+                        allowJump = true;
+                    break;
+                case 0xDA:
+                    if (!!GetCarryFlag())
+                        allowJump = true;
                     break;
                 default:
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
             }
 
-            AffectZeroFlag((val + 1) == 0);
-            AffectSubFlag(false);
-            AffectHalfCarryFlag((((val & 0xF) + 1) & 0x10) == 0x10);
+            if (allowJump)
+                Reg_PC = mmu.ReadWord(Reg_PC);
 
-            lastOpCycles = 4;
-            return;
+            lastOpCycles = 12;
         }
 
-        //16-bit ALU Increment (DP, 92)
-        private void INC_16(byte opcode)
+        // 3. JP (HL) (p.112)
+        //
+        // - Description -
+        // Jump to address contained in HL.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // JP           (HL)        E9      4
+        private void JP_HLm(byte opcode)
         {
-            ushort val;
             switch (opcode)
             {
-                case 0x03:
-                    val = Reg_BC;
-                    Reg_BC++;
-                    break;
-                default:
-                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
-            }
-
-            lastOpCycles = 8;
-            return;
-        }
-
-        //8-bit ALU Decrement (DP, 89)
-        private void DEC(byte opcode)
-        {
-            ushort val;
-            switch (opcode)
-            {
-                case 0x05:
-                    val = Reg_B;
-                    Reg_B--;
-                    break;
-                case 0x0B:
-                    val = Reg_BC;
-                    Reg_BC--;
-                    break;
-                case 0x0D:
-                    val = Reg_D;
-                    Reg_D--;
-                    break;
-                default:
-                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
-            }
-
-            AffectZeroFlag((val - 1) == 0);
-            AffectSubFlag(true);
-            AffectHalfCarryFlag((val & 0xF) - 1 < 0);
-        }
-
-        //16-bit ALU Decrement (DP, 93)
-        private void DEC_16(byte opcode)
-        {
-            ushort val;
-            switch (opcode)
-            {
-                case 0x05:
-                    val = Reg_B;
-                    Reg_B--;
-                    break;
-                case 0x0B:
-                    val = Reg_BC;
-                    Reg_BC--;
-                    break;
-                case 0x0D:
-                    val = Reg_D;
-                    Reg_D--;
+                case 0xE9:
+                    Reg_PC = mmu.ReadWord(Reg_HL);
+                    lastOpCycles = 4;
                     break;
                 default:
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
             }
         }
 
-        private void ADD_HL(byte opcode)
+        // 4. JR n (p.112)
+        //
+        // - Description -
+        // Add n to current address and jump to it.
+        //
+        // - Use with -
+        // n = one byte signed immediate value
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // JR           n           18      8
+        private void JR_n(byte opcode)
         {
-            ushort delta;
             switch (opcode)
             {
-                case 0x09:
-                    delta = Reg_BC;
-                    Reg_HL += Reg_BC;
+                case 0xE9:
+                    var signedVal = Reg_PC > 127
+                        ? -((~Reg_PC + 1) & 0xFF)
+                        : Reg_PC;
+                    Reg_PC++;
+                    Reg_PC = (ushort)(Reg_PC + signedVal);
+                    lastOpCycles = 8;
                     break;
                 default:
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
             }
-
-            AffectSubFlag(false);
-            AffectHalfCarryFlag((((Reg_HL & 0xFFF) + (delta & 0xFFF)) & 0x1000) == 0x1000);
-            AffectCarryFlag((Reg_HL + delta) > 0xFFFF);
         }
 
-        //Exclusive OR register with Reg_A, result saved into Reg_A (DP, 86)
-        private void XOR_r8(byte opcode)
+        // 5. JR cc,n (p.113)
+        //
+        // - Description -
+        // Add n to current address and jump to it if following condition is true:
+        //   cc = NZ,   Jump if Z flag is reset.
+        //   cc = Z,    Jump if Z flag is set.
+        //   cc = NC,   Jump if C flag is reset.
+        //   cc = C,    Jump if C flag is set.
+        //
+        // - Use with -
+        // n = one byte signed immediate value
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // JR           NZ, n       20      8
+        // JR           Z, n        28      8
+        // JR           NC, n       30      8
+        // JR           C, n        38      8
+        private void JR_cc_n(byte opcode)
         {
-            byte val;
-            switch (opcode)
-            {
-                case 0xAF:
-                    val = Reg_A;
-                    Reg_A ^= Reg_A;
-                    break;
-                default:
-                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
-            }
+            var allowJump = false;
 
-            AffectZeroFlag((val ^ Reg_A) == 0);
-            AffectSubFlag(false);
-            AffectHalfCarryFlag(false);
-            AffectCarryFlag(false);
-
-            lastOpCycles = 4;
-        }
-
-        //Exclusive OR value from memory with Reg_A, result saved into Reg_A (DP, 86)
-        private void XOR_r8m(byte opcode)
-        {
-            byte val;
-            switch (opcode)
-            {
-                case 0xAF:
-                    val = Reg_A;
-                    Reg_A ^= Reg_A;
-                    break;
-                default:
-                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
-            }
-
-            AffectZeroFlag((val ^ Reg_A) == 0);
-            AffectSubFlag(false);
-            AffectHalfCarryFlag(false);
-            AffectCarryFlag(false);
-
-            lastOpCycles = 8;
-        }
-
-        //Push address of next instruction onto stack and then jump to address of next word in memory (DP, 114)
-        private void CALL_d16m(byte opcode)
-        {
-            Reg_SP -= 2;
-            mmu.WriteWord(Reg_SP, (ushort)(Reg_PC + 2));
-            Reg_PC = mmu.ReadWord(Reg_PC);
-
-            lastOpCycles = 4;
-        }
-
-        //Call address of next word in memory if condition is met (DP, 115)
-        private void CALL_CC_d16m(byte opcode)
-        {
-            switch (opcode)
-            {
-                case 0xC4:
-                    if (GetZeroFlag())
-                    {
-                        lastOpCycles = 12;
-                        return;
-                    }
-                    break;
-            }
-
-            Reg_SP -= 2;
-            mmu.WriteWord(Reg_SP, (ushort)(Reg_PC + 2));
-            Reg_PC = mmu.ReadWord(Reg_PC);
-
-            lastOpCycles = 24;
-        }
-
-        //Jump to address PC + (next memory location as signed bit) if condition is met (DP, 113)
-        private void JR_CC_r8(byte opcode)
-        {
             switch (opcode)
             {
                 case 0x20:
-                    if (GetZeroFlag())
-                    {
-                        lastOpCycles = 8;
-                        return;
-                    }
+                    if (!GetZeroFlag())
+                        allowJump = true;
+                    break;
+                case 0x28:
+                    if (!!GetZeroFlag())
+                        allowJump = true;
+                    break;
+                case 0x30:
+                    if (!GetCarryFlag())
+                        allowJump = true;
+                    break;
+                case 0x38:
+                    if (!!GetCarryFlag())
+                        allowJump = true;
                     break;
                 default:
                     throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
             }
 
-            var signed = unchecked((sbyte)mmu.ReadByte(Reg_PC++));
-
-            Reg_PC = signed < 0
-                    ? (ushort)(Reg_PC - (ushort)(signed * (-1)))
-                    : (ushort)(Reg_PC + (ushort)signed);
-
-            lastOpCycles = 12;
+            if (allowJump)
+            {
+                var signedVal = Reg_PC > 127
+                    ? -((~Reg_PC + 1) & 0xFF)
+                    : Reg_PC;
+                Reg_PC++;
+                Reg_PC = (ushort)(Reg_PC + signedVal);
+                lastOpCycles = 8;
+            }
         }
 
-        //Call instruction at index PC+1 from CB map
-        private void CB(byte opcode)
+        #endregion
+
+        #region Calls
+
+        // 1. CALL nn (p.114)
+        //
+        // - Description -
+        // Push address of next instruction onto stack and then jump to address nn.
+        //
+        // - Use with -
+        // nn = two byte immediate value. (LS byte first.)
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // CALL         nn          CD      12
+        private void CALL_nn(byte opcode)
         {
-            CbMap[mmu.ReadByte(Reg_PC++)]();
-            lastOpCycles += 4;
+            switch (opcode)
+            {
+                case 0xC3:
+                    mmu.WriteWord(Reg_SP, ++Reg_PC);
+                    Reg_SP -= 2;
+                    Reg_PC = mmu.ReadWord(Reg_PC);
+                    lastOpCycles = 12;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
         }
 
-        //CB codes
-        private void BIT7_H()       //BIT 7,H
+        // 2. CALL cc,nn (p.115)
+        //
+        // - Description -
+        // Call address n if following condition is true:
+        //   cc = NZ,   Jump if Z flag is reset.
+        //   cc = Z,    Jump if Z flag is set.
+        //   cc = NC,   Jump if C flag is reset.
+        //   cc = C,    Jump if C flag is set.
+        //
+        // - Use with -
+        // nn = two byte immediate value. (LS byte first.)
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // CALL         NZ, nn      C4      12
+        // CALL         Z, nn       CC      12
+        // CALL         NC, nn      D4      12
+        // CALL         C, nn       DC      12
+        private void CALL_cc_nn(byte opcode)
         {
-            if (!GetBit7(Reg_H)) AffectZeroFlag(true);
-            AffectSubFlag(false);
-            AffectHalfCarryFlag(true);
+            var allowCall = false;
+            switch (opcode)
+            {
+                case 0xC4:
+                    if (!GetZeroFlag())
+                        allowCall = true;
+                    break;
+                case 0xCC:
+                    if (!!GetZeroFlag())
+                        allowCall = true;
+                    break;
+                case 0xD4:
+                    if (!GetCarryFlag())
+                        allowCall = true;
+                    break;
+                case 0xDC:
+                    if (!!GetCarryFlag())
+                        allowCall = true;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            if (allowCall)
+            {
+                mmu.WriteWord(Reg_SP, ++Reg_PC);
+                Reg_SP -= 2;
+                Reg_PC = mmu.ReadWord(Reg_PC);
+                lastOpCycles = 12;
+            }
+        }
+
+        #endregion
+
+        #region Restarts
+
+        // 1. RST n (p.116)
+        //
+        // - Description -
+        // Push present address onto stack.
+        // Jump to address 0x0000 + n.
+        //
+        // - Use with -
+        // nn = 0x00, 0x08, 0x10, 0x18, 0x20, 0x28, 0x30, 0x38
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RST          0x00         C7      32
+        // RST          0x08         CF      32
+        // RST          0x10         D7      32
+        // RST          0x18         DF      32
+        // RST          0x20         E7      32
+        // RST          0x28         EF      32
+        // RST          0x30         F7      32
+        // RST          0x38         FF      32
+        private void RST_n(byte opcode)
+        {
+            switch (opcode)
+            {
+                case 0xC7:
+                    mmu.WriteWord(Reg_SP, Reg_PC);
+                    Reg_SP -= 2;
+                    Reg_PC = 0x00;
+                    break;
+                case 0xCF:
+                    mmu.WriteWord(Reg_SP, Reg_PC);
+                    Reg_SP -= 2;
+                    Reg_PC = 0x08;
+                    break;
+                case 0xD7:
+                    mmu.WriteWord(Reg_SP, Reg_PC);
+                    Reg_SP -= 2;
+                    Reg_PC = 0x10;
+                    break;
+                case 0xDF:
+                    mmu.WriteWord(Reg_SP, Reg_PC);
+                    Reg_SP -= 2;
+                    Reg_PC = 0x18;
+                    break;
+                case 0xE7:
+                    mmu.WriteWord(Reg_SP, Reg_PC);
+                    Reg_SP -= 2;
+                    Reg_PC = 0x20;
+                    break;
+                case 0xEF:
+                    mmu.WriteWord(Reg_SP, Reg_PC);
+                    Reg_SP -= 2;
+                    Reg_PC = 0x28;
+                    break;
+                case 0xF7:
+                    mmu.WriteWord(Reg_SP, Reg_PC);
+                    Reg_SP -= 2;
+                    Reg_PC = 0x30;
+                    break;
+                case 0xFF:
+                    mmu.WriteWord(Reg_SP, Reg_PC);
+                    Reg_SP -= 2;
+                    Reg_PC = 0x38;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            lastOpCycles = 32;
+        }
+
+        #endregion
+
+        #region Returns
+
+        // 1. RET (p.117)
+        //
+        // - Description -
+        // Pop two bytes from stack & jump to that address.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RET          -/-         C9      8
+        private void RET(byte opcode)
+        {
+            switch (opcode)
+            {
+                case 0xC3:
+                    Reg_PC = mmu.ReadWord(Reg_SP);
+                    Reg_SP += 2;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
 
             lastOpCycles = 8;
         }
 
-        public void RLC_HLm()       //RLC (HL)
+        // 2. RET cc (p.117)
+        //
+        // - Description -
+        // Return if following condition is true:
+        //   cc = NZ,   Jump if Z flag is reset.
+        //   cc = Z,    Jump if Z flag is set.
+        //   cc = NC,   Jump if C flag is reset.
+        //   cc = C,    Jump if C flag is set.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RET          NZ          C0      8
+        // RET          Z           C8      8
+        // RET          NC          D0      8
+        // RET          C           D8      8
+        private void RET_cc(byte opcode)
         {
-            bool toCarry = GetBit7(mmu.ReadByte(Reg_HL));
-            mmu.WriteByte(Reg_HL, (byte)((mmu.ReadByte(Reg_HL) << 1) + (toCarry ? 1 : 0)));
+            var allowReturn = false;
+            switch (opcode)
+            {
+                case 0xC0:
+                    if (!GetZeroFlag())
+                        allowReturn = true;
+                    break;
+                case 0xC8:
+                    if (!!GetZeroFlag())
+                        allowReturn = true;
+                    break;
+                case 0xD0:
+                    if (!GetCarryFlag())
+                        allowReturn = true;
+                    break;
+                case 0xD8:
+                    if (!!GetCarryFlag())
+                        allowReturn = true;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
 
-            AffectZeroFlag(mmu.ReadByte(Reg_HL) == 0);
-            AffectSubFlag(false);
-            AffectHalfCarryFlag(false);
-            AffectCarryFlag(toCarry);
-
-            lastOpCycles = 16;
+            if (allowReturn)
+            {
+                Reg_PC = mmu.ReadWord(Reg_SP);
+                Reg_SP += 2;
+            }
+            lastOpCycles = 8;
         }
+
+        // 3. RETI (p.118)
+        //
+        // - Description -
+        // Pop two bytes from stack & jump to that address then
+        // enable interrupts.
+        //
+        // - Opcodes -
+        // Instruction  Parameters  Opcode  Cycles
+        // RETI         -/-         D9      8
+        private void RETI(byte opcode)
+        {
+            switch (opcode)
+            {
+                case 0xC3:
+                    Reg_PC = mmu.ReadWord(Reg_SP);
+                    Reg_SP += 2;
+                    interruptsEnabled = true;
+                    break;
+                default:
+                    throw new InstructionNotImplementedException($"Instruction not implemented! OpCode: {opcode}");
+            }
+
+            lastOpCycles = 8;
+        }
+
+        #endregion
+
+        // CB Prefix handler
+        private void CB(byte opcode)
+        {
+            useCbMap = true;
+        }
+
         #endregion
 
         #region Helper Functions
-        private bool GetBit7(byte val)              { return (val & 0x80) == 0x80; }
-        private bool GetBit6(byte val)              { return (val & 0x40) == 0x40; }
-        private bool GetBit5(byte val)              { return (val & 0x20) == 0x20; }
-        private bool GetBit4(byte val)              { return (val & 0x10) == 0x10; }
-        private bool GetBit3(byte val)              { return (val & 0x08) == 0x08; }
-        private bool GetBit2(byte val)              { return (val & 0x04) == 0x04; }
-        private bool GetBit1(byte val)              { return (val & 0x02) == 0x02; }
-        private bool GetBit0(byte val)              { return (val & 0x01) == 0x01; }
+        private bool GetBit(int bit, byte val)
+        {
+            return ((1 << bit) & val) != 0;
+        }
 
-        private bool GetZeroFlag()                  { return GetBit7(Reg_F); }
-        private bool GetSubFlag()                   { return GetBit6(Reg_F); }
-        private bool GetHalfCarryFlag()             { return GetBit5(Reg_F); }
-        private bool GetCarryFlag()                 { return GetBit4(Reg_F); }
+        private byte AffectBit(int bit, byte val, bool set)
+        {
+            val = (byte)((1 << bit) | val);
+            return val;
+        }
 
-        private void AffectZeroFlag(bool set)       { Reg_F = set ? (byte)(Reg_F | (1 << 7)) : (byte)(Reg_F & ~(1 << 7)); }
-        private void AffectSubFlag(bool set)        { Reg_F = set ? (byte)(Reg_F | (1 << 6)) : (byte)(Reg_F & ~(1 << 6)); }
-        private void AffectHalfCarryFlag(bool set)  { Reg_F = set ? (byte)(Reg_F | (1 << 5)) : (byte)(Reg_F & ~(1 << 5)); }
-        private void AffectCarryFlag(bool set)      { Reg_F = set ? (byte)(Reg_F | (1 << 4)) : (byte)(Reg_F & ~(1 << 4)); }
+        private bool GetZeroFlag()                  { return GetBit(7, Reg_F); }
+        private bool GetSubFlag()                   { return GetBit(6, Reg_F); }
+        private bool GetHalfCarryFlag()             { return GetBit(5, Reg_F); }
+        private bool GetCarryFlag()                 { return GetBit(4, Reg_F); }
+
+        private void AffectZeroFlag(bool set)       { AffectBit(7, Reg_F, set); }
+        private void AffectSubFlag(bool set)        { AffectBit(6, Reg_F, set); }
+        private void AffectHalfCarryFlag(bool set)  { AffectBit(5, Reg_F, set); }
+        private void AffectCarryFlag(bool set)      { AffectBit(4, Reg_F, set); }
         #endregion
 
         #region Debug Functions
